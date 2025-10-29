@@ -7,6 +7,7 @@ import dji.v5.ux.core.util.UxSharedPreferencesUtil
 import dji.v5.ux.sample.showcase.defaultlayout.DefaultLayoutActivity
 import dji.v5.ux.sample.showcase.widgetlist.WidgetsActivity
 
+
 /**
  * Class Description
  *

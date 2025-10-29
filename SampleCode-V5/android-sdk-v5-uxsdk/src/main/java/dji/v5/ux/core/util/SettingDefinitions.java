@@ -26,6 +26,7 @@ package dji.v5.ux.core.util;
 import androidx.annotation.IntRange;
 import androidx.annotation.NonNull;
 
+
 /**
  * This class contains enums for UX SDK settings.
  */

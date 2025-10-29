@@ -22,7 +22,7 @@ import dji.v5.utils.common.LogUtils
 import dji.v5.utils.common.PermissionUtil
 import dji.v5.utils.common.StringUtils
 import io.reactivex.rxjava3.disposables.CompositeDisposable
-
+import dji.sampleV5.aircraft.logging.TelemetryLogger
 /**
  * Class Description
  *
@@ -61,6 +61,8 @@ abstract class DJIMainActivity : AppCompatActivity() {
     private val handler: Handler = Handler(Looper.getMainLooper())
     private val disposable = CompositeDisposable()
 
+    private var telemetryLogger: TelemetryLogger? = null
+
     abstract fun prepareUxActivity()
 
     abstract fun prepareTestingToolsActivity()
@@ -87,6 +89,8 @@ abstract class DJIMainActivity : AppCompatActivity() {
         initMSDKInfoView()
         observeSDKManager()
         checkPermissionAndRequest()
+
+        telemetryLogger = TelemetryLogger(this)
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -149,6 +153,22 @@ abstract class DJIMainActivity : AppCompatActivity() {
                 statusText = StringUtils.getResStr(this, R.string.unregistered)
             }
             binding.textViewRegistered.text = StringUtils.getResStr(R.string.registration_status, statusText)
+        }
+
+        //start logging
+        msdkManagerVM.lvProductConnectionState.observe(this) { resultPair ->
+            val connected = resultPair.first
+            val productName = resultPair.second
+
+            ToastUtils.showToast("Product: $productName ,ConnectionState: $connected")
+
+            if (connected) {
+                LogUtils.i(tag, "Drone connected — starting telemetry logging.")
+                telemetryLogger?.startLogging()
+            } else {
+                LogUtils.w(tag, "Drone disconnected — stopping telemetry logging.")
+                telemetryLogger?.stopLogging()
+            }
         }
 
         msdkManagerVM.lvProductConnectionState.observe(this) { resultPair ->
@@ -226,6 +246,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        telemetryLogger?.stopLogging()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         disposable.dispose()
