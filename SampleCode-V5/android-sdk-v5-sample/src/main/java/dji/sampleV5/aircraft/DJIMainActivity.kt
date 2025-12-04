@@ -22,7 +22,7 @@ import dji.v5.utils.common.LogUtils
 import dji.v5.utils.common.PermissionUtil
 import dji.v5.utils.common.StringUtils
 import io.reactivex.rxjava3.disposables.CompositeDisposable
-import dji.sampleV5.aircraft.logging.TelemetryLogger
+//import dji.sampleV5.aircraft.logging.TelemetryLogger
 /**
  * Class Description
  *
@@ -44,9 +44,9 @@ abstract class DJIMainActivity : AppCompatActivity() {
     init {
         permissionArray.apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-//                add(Manifest.permission.READ_MEDIA_IMAGES)
-//                add(Manifest.permission.READ_MEDIA_VIDEO)
-//                add(Manifest.permission.READ_MEDIA_AUDIO)
+                add(Manifest.permission.READ_MEDIA_IMAGES)
+                add(Manifest.permission.READ_MEDIA_VIDEO)
+                add(Manifest.permission.READ_MEDIA_AUDIO)
             } else {
                 add(Manifest.permission.READ_EXTERNAL_STORAGE)
                 add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -61,7 +61,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
     private val handler: Handler = Handler(Looper.getMainLooper())
     private val disposable = CompositeDisposable()
 
-    private var telemetryLogger: TelemetryLogger? = null
+    //private var telemetryLogger: TelemetryLogger? = null
 
     abstract fun prepareUxActivity()
 
@@ -90,8 +90,11 @@ abstract class DJIMainActivity : AppCompatActivity() {
         observeSDKManager()
         checkPermissionAndRequest()
 
-        telemetryLogger = TelemetryLogger(this)
+        /*telemetryLogger = TelemetryLogger(this)
+        telemetryLogger?.startLogging()
+    */
     }
+
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
@@ -162,12 +165,9 @@ abstract class DJIMainActivity : AppCompatActivity() {
 
             ToastUtils.showToast("Product: $productName ,ConnectionState: $connected")
 
-            if (connected) {
-                LogUtils.i(tag, "Drone connected — starting telemetry logging.")
-                telemetryLogger?.startLogging()
-            } else {
+            if (!connected) {
                 LogUtils.w(tag, "Drone disconnected — stopping telemetry logging.")
-                telemetryLogger?.stopLogging()
+                //telemetryLogger?.stopLogging()
             }
         }
 
@@ -246,7 +246,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        telemetryLogger?.stopLogging()
+        //telemetryLogger?.stopLogging()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         disposable.dispose()

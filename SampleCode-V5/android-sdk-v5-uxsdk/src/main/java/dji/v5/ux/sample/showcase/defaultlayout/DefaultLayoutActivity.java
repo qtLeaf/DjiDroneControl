@@ -40,6 +40,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.core.view.GravityCompat;
 import androidx.drawerlayout.widget.DrawerLayout;
+
 import dji.sdk.keyvalue.value.common.CameraLensType;
 import dji.sdk.keyvalue.value.common.ComponentIndexType;
 import dji.v5.manager.datacenter.MediaDataCenter;
@@ -50,6 +51,7 @@ import dji.v5.utils.common.JsonUtil;
 import dji.v5.utils.common.LogPath;
 import dji.v5.utils.common.LogUtils;
 import dji.v5.ux.R;
+import dji.v5.ux.TelemetryLogger;
 import dji.v5.ux.accessory.RTKStartServiceHelper;
 import dji.v5.ux.cameracore.widget.autoexposurelock.AutoExposureLockWidget;
 import dji.v5.ux.cameracore.widget.cameracontrols.CameraControlsWidget;
@@ -116,6 +118,7 @@ public class DefaultLayoutActivity extends AppCompatActivity {
     private GimbalFineTuneWidget gimbalFineTuneWidget;
     private ComponentIndexType lastDevicePosition = ComponentIndexType.UNKNOWN;
     private CameraLensType lastLensType = CameraLensType.UNKNOWN;
+
 
 
     private CompositeDisposable compositeDisposable;
@@ -245,6 +248,11 @@ public class DefaultLayoutActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+
+        /*
+        telemetryLogger = new TelemetryLogger(this);//---
+        telemetryLogger.startLogging();
+        */
         mapWidget.onResume();
         compositeDisposable = new CompositeDisposable();
         compositeDisposable.add(systemStatusListPanelWidget.closeButtonPressed()
@@ -278,6 +286,10 @@ public class DefaultLayoutActivity extends AppCompatActivity {
 
     @Override
     protected void onPause() {
+        /*if (telemetryLogger != null) {//----
+            telemetryLogger.stopLogging();
+        }*/
+
         if (compositeDisposable != null) {
             compositeDisposable.dispose();
             compositeDisposable = null;

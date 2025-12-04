@@ -291,7 +291,20 @@
             app:layout_constraintWidth_percent="0.95"
             app:uxsdk_titleBarBackgroundColor="@color/uxsdk_black" />
 
+        <dji.v5.ux.TelemetryDataView
+            android:id="@+id/telemetry_data_view"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            android:layout_marginStart="10dp"
+            android:layout_marginTop="10dp"
+            android:tag="normal"
+            />
+
     </androidx.constraintlayout.widget.ConstraintLayout>
+
+
 
     <dji.v5.ux.core.widget.setting.SettingPanelWidget
         android:id="@+id/manual_right_nav_setting"

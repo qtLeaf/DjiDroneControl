@@ -23,7 +23,7 @@
 
 package dji.v5.ux.core.base.panel
 
-import android.view.View
+import xwandroid.view.View
 import androidx.annotation.IntRange
 import io.reactivex.rxjava3.core.Flowable
 import dji.v5.ux.core.util.DataProcessor
