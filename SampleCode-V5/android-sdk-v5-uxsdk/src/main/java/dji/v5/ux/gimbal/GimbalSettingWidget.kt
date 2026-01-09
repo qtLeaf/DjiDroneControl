@@ -103,7 +103,7 @@ open class GimbalSettingWidget @JvmOverloads constructor(
                 ViewUtil.showToast(context, R.string.uxsdk_setting_ui_gimbal_calibration_tip, Toast.LENGTH_SHORT)
                 return
             }
-            ViewUtil.showToast(context, R.string.uxsdk_setting_ui_gimbal_auto_calibration_tip, Toast.LENGTH_SHORT)
+            ViewUtil.showToast(context, R.string.uxsdk_setting_ui_gimbal_auto_calibration_tip, Toast.LENGTH_SHORT) // Check that aircraft is level and nothing is obstructing
             widgetModel.calibrateGimbal().subscribe()
         }
         else if (v.id ==R.id.setting_menu_gimbal_adjust) {

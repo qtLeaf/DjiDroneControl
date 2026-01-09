@@ -1,4 +1,6 @@
 ext {
+
+
     deps = [:]
     //DJI MSDK V5包
     deps.aircraft = "com.dji:dji-sdk-v5-aircraft:5.16.0"

@@ -205,6 +205,32 @@ class VirtualStickFragment : DJIFragment() {
         })
     }
 
+
+    //new add -> allow the use of rc stick as virtual stick trough flora data
+    /*fun setVirtualStickPercent(leftX: Float, leftY: Float, rightX: Float, rightY: Float) {
+        val lx = (leftX.coerceIn(-1f, 1f) * Stick.MAX_STICK_POSITION_ABS).toInt()
+        val ly = (leftY.coerceIn(-1f, 1f) * Stick.MAX_STICK_POSITION_ABS).toInt()
+        val rx = (rightX.coerceIn(-1f, 1f) * Stick.MAX_STICK_POSITION_ABS).toInt()
+        val ry = (rightY.coerceIn(-1f, 1f) * Stick.MAX_STICK_POSITION_ABS).toInt()
+
+        virtualStickVM.setLeftPosition(lx, ly)
+        virtualStickVM.setRightPosition(rx, ry)
+    }*/
+
+    /* use:
+    * Fly forward
+    * setVirtualStickPercent(
+    * leftX = 0f,
+    * leftY = 0.5f,
+    * rightX = 0f,
+    * rightY = 0f
+    * )
+    *
+    * leftY > 0 = up
+    * leftX > 0 = rotazione (yaw) verso destra
+    * rightY > 0 = avanti
+    * rightX > 0 = destra
+    * */
     private fun updateVirtualStickInfo() {
         val builder = StringBuilder()
         builder.append("Speed level:").append(virtualStickVM.currentSpeedLevel.value)

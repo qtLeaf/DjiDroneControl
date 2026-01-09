@@ -11,17 +11,23 @@ import android.view.View
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.ViewModelProvider
 import dji.sampleV5.aircraft.databinding.ActivityMainBinding
 import dji.sampleV5.aircraft.models.BaseMainActivityVm
 import dji.sampleV5.aircraft.models.MSDKInfoVm
 import dji.sampleV5.aircraft.models.MSDKManagerVM
 import dji.sampleV5.aircraft.models.globalViewModels
+import dji.sampleV5.aircraft.tests.General
 import dji.sampleV5.aircraft.util.Helper
 import dji.sampleV5.aircraft.util.ToastUtils
 import dji.v5.utils.common.LogUtils
 import dji.v5.utils.common.PermissionUtil
 import dji.v5.utils.common.StringUtils
 import io.reactivex.rxjava3.disposables.CompositeDisposable
+
+import dji.sampleV5.aircraft.models.BasicAircraftControlVM
+import dji.sampleV5.aircraft.models.VirtualStickVM
+import dji.sampleV5.aircraft.models.SimulatorVM
 //import dji.sampleV5.aircraft.logging.TelemetryLogger
 /**
  * Class Description
@@ -63,6 +69,10 @@ abstract class DJIMainActivity : AppCompatActivity() {
 
     //private var telemetryLogger: TelemetryLogger? = null
 
+    //test:
+    private lateinit var general: General
+
+
     abstract fun prepareUxActivity()
 
     abstract fun prepareTestingToolsActivity()
@@ -71,6 +81,12 @@ abstract class DJIMainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
+
+        //test button
+        binding.btnStartGeneralTest.setOnClickListener {
+            general.startTest()
+        }
+
 
         // 有一些手机从系统桌面进入的时候可能会重启main类型的activity
         // 需要校验这种情况，业界标准做法，基本所有app都需要这个
@@ -186,6 +202,31 @@ abstract class DJIMainActivity : AppCompatActivity() {
         msdkManagerVM.lvDBDownloadProgress.observe(this) { resultPair ->
             showToast("Database Download Progress current: ${resultPair.first}, total: ${resultPair.second}")
         }
+
+        //test:
+        msdkManagerVM.lvRegisterState.observe(this) { pair ->
+            val registered = pair.first
+
+            if (registered) {
+                val basicVM = ViewModelProvider(this)
+                    .get(BasicAircraftControlVM::class.java)
+
+                val virtualStickVM = ViewModelProvider(this)
+                    .get(VirtualStickVM::class.java)
+
+                val simulatorVM = ViewModelProvider(this)
+                    .get(SimulatorVM::class.java)
+
+                general = General(
+                    basicAircraftControlVM = basicVM,
+                    virtualStickVM = virtualStickVM,
+                    simulatorVM = simulatorVM
+                )
+
+                binding.btnStartGeneralTest.isEnabled = true
+            }
+        }
+
     }
 
     private fun showToast(content: String) {

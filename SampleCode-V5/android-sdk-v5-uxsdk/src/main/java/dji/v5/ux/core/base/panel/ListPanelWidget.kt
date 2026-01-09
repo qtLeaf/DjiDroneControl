@@ -215,10 +215,14 @@ abstract class ListPanelWidget<T : Any> @JvmOverloads constructor(
         override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
             val view = listPanelWidgetBaseModel.getWidget(position)
                 ?: throw IllegalAccessException("View not found at position $position")
+            /*
             if (view is Navigable) {
                 view.panelNavigator = this@ListPanelWidget.panelNavigator
             }
-            view.setHasTransientState(true)
+            */
+
+
+            ViewCompat.setHasTransientState(view, true)
             return view
         }
 

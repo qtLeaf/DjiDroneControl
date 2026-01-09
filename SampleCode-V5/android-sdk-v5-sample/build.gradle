@@ -129,4 +129,6 @@ dependencies {
     implementation deps.dom
     kapt deps.glidecompiler
     implementation deps.lynx
+
+    implementation "org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5"
 }
