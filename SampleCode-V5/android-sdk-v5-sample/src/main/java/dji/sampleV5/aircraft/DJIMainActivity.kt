@@ -261,7 +261,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
                     mqttPort = MQTT_PORT,
                 ) { msg ->
                     runOnUiThread {
-                        tvDebug.append(msg + "\n")
+                        tvDebug.append(msg + " \n")
                         debugScroll.post {
                             debugScroll.fullScroll(View.FOCUS_DOWN)
                         }
