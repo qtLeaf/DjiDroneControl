@@ -14,7 +14,7 @@ import android.util.Base64
 import java.io.File
 
 class MqttPublisher(
-    brokerIp: String = "192.168.1.100",
+    brokerIp: String = "192.168.1.3",
     brokerPort: Int = 1883
 ) {
 
@@ -41,7 +41,7 @@ class MqttPublisher(
     fun publishTelemetry(
         location: LocationCoordinate3D,
         attitude: Attitude
-    ) {
+    ): String {
         val json = JSONObject().apply {
             put("lat", location.getLatitude())
             put("lon", location.getLongitude())
@@ -53,6 +53,8 @@ class MqttPublisher(
         }
 
         publish("drone/telemetry", json.toString())
+
+        return json.toString()
     }
 
     // ---------- PHOTO ----------

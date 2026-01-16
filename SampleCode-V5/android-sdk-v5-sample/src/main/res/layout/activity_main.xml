@@ -213,6 +213,28 @@
         app:layout_constraintStart_toStartOf="@+id/msg_panel"
         app:layout_constraintTop_toTopOf="@+id/msg_panel" />
 
+    <ScrollView
+        android:id="@+id/debug_scroll"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:layout_margin="8dp"
+        android:background="#22000000"
+        app:layout_constraintTop_toBottomOf="@id/text_view_news_title"
+        app:layout_constraintStart_toStartOf="@id/msg_panel"
+        app:layout_constraintEnd_toEndOf="@id/msg_panel"
+        app:layout_constraintBottom_toTopOf="@id/panel_icon_msg">
+
+        <TextView
+            android:id="@+id/tvDebug"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DEBUG LOG:\n"
+            android:textSize="12sp"
+            android:textColor="@android:color/white"
+            android:padding="8dp" />
+    </ScrollView>
+
+
     <dji.sampleV5.aircraft.views.VersionInfoView
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -337,6 +359,7 @@
             app:layout_constraintStart_toStartOf="@+id/guide_2"
             app:layout_constraintTop_toBottomOf="@+id/icon_tech_support" />
     </androidx.constraintlayout.widget.ConstraintLayout>
+
 
     <TextView
         android:id="@+id/text_core_info"

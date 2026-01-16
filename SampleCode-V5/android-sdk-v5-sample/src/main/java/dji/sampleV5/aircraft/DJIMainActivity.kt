@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
+import android.widget.ScrollView
+import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -28,6 +30,11 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import dji.sampleV5.aircraft.models.BasicAircraftControlVM
 import dji.sampleV5.aircraft.models.VirtualStickVM
 import dji.sampleV5.aircraft.models.SimulatorVM
+import dji.v5.utils.common.ThreadUtil
+
+import dji.v5.utils.common.ThreadUtil.runOnUiThread
+import kotlin.text.append
+
 //import dji.sampleV5.aircraft.logging.TelemetryLogger
 /**
  * Class Description
@@ -37,6 +44,10 @@ import dji.sampleV5.aircraft.models.SimulatorVM
  *
  * Copyright (c) 2022, DJI All Rights Reserved.
  */
+
+
+
+
 abstract class DJIMainActivity : AppCompatActivity() {
 
     val tag: String = LogUtils.getTag(this)
@@ -70,8 +81,17 @@ abstract class DJIMainActivity : AppCompatActivity() {
     //private var telemetryLogger: TelemetryLogger? = null
 
     //test:
-    private lateinit var general: General
+    private val MQTT_HOST = "192.168.1.3"
+    private val MQTT_PORT = 1883
 
+    private lateinit var tvDebug: TextView
+    private lateinit var debugScroll: ScrollView
+
+
+    private var general: General?= null
+
+
+    //-test
 
     abstract fun prepareUxActivity()
 
@@ -82,9 +102,24 @@ abstract class DJIMainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        //test button
+        //test button & text view
+        debugScroll = findViewById(R.id.debug_scroll)
+        tvDebug = findViewById(R.id.tvDebug)
+
         binding.btnStartGeneralTest.setOnClickListener {
-            general.startTest()
+            val g = general
+            if (g == null) {
+                tvDebug.append("General test not initialized\n")
+                return@setOnClickListener
+            }
+
+            if (g.isRunning()) {
+                g.stopTelemetryTest()
+                binding.btnStartGeneralTest.text = "START TEST"
+            } else {
+                g.startTelemetryTest()
+                binding.btnStartGeneralTest.text = "STOP TEST"
+            }
         }
 
 
@@ -204,6 +239,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
         }
 
         //test:
+
         msdkManagerVM.lvRegisterState.observe(this) { pair ->
             val registered = pair.first
 
@@ -220,12 +256,25 @@ abstract class DJIMainActivity : AppCompatActivity() {
                 general = General(
                     basicAircraftControlVM = basicVM,
                     virtualStickVM = virtualStickVM,
-                    simulatorVM = simulatorVM
-                )
+                    simulatorVM = simulatorVM,
+                    mqttHost = MQTT_HOST,
+                    mqttPort = MQTT_PORT,
+                ) { msg ->
+                    runOnUiThread {
+                        tvDebug.append(msg + "\n")
+                        debugScroll.post {
+                            debugScroll.fullScroll(View.FOCUS_DOWN)
+                        }
+                    }
+                }
 
                 binding.btnStartGeneralTest.isEnabled = true
+                binding.btnStartGeneralTest.text = "START TEST"
+            } else {
+                binding.btnStartGeneralTest.isEnabled = false
             }
         }
+
 
     }
 
