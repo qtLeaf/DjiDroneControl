@@ -1,8 +1,7 @@
 package dji.sampleV5.aircraft.tests.network
 
+import android.content.Context
 import dji.sdk.keyvalue.value.common.Attitude
-import dji.v5.manager.KeyManager
-import dji.sdk.keyvalue.value.flightcontroller.GPSSignalLevel
 import dji.sdk.keyvalue.value.common.LocationCoordinate3D
 
 import org.eclipse.paho.client.mqttv3.MqttClient
@@ -11,11 +10,13 @@ import org.eclipse.paho.client.mqttv3.MqttMessage
 
 import org.json.JSONObject
 import android.util.Base64
+import dji.sampleV5.aircraft.tests.config.MqttConfig
+import org.eclipse.paho.client.mqttv3.MqttCallback
 import java.io.File
 
 class MqttPublisher(
-    brokerIp: String = "192.168.1.3",
-    brokerPort: Int = 1883
+    brokerIp: String = MqttConfig.HOST,
+    brokerPort: Int = MqttConfig.PORT
 ) {
 
     private val brokerUrl = "tcp://$brokerIp:$brokerPort"
@@ -59,21 +60,21 @@ class MqttPublisher(
 
     // ---------- PHOTO ----------
 
-    fun publishPhoto(file: File) {
-        val bytes = file.readBytes()
+    fun publishPhoto(bytes: ByteArray, filename: String = "frame.jpg") {
         val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
 
         val json = JSONObject().apply {
-            put("filename", file.name)
+            put("filename", filename)
             put("data", encoded)
         }
 
         publish("drone/photo", json.toString())
     }
 
+
     // ---------- INTERNAL ----------
 
-    private fun publish(topic: String, payload: String) {
+    fun publish(topic: String, payload: String) {
         if (!client.isConnected) return
 
         val message = MqttMessage(payload.toByteArray()).apply {
@@ -81,5 +82,46 @@ class MqttPublisher(
             isRetained = false
         }
         client.publish(topic, message)
+    }
+}
+
+class MqttSubscriber(
+    brokerIp: String = MqttConfig.HOST,
+    brokerPort: Int = MqttConfig.PORT,
+    private val onCommand: (String) -> Unit,
+    private val onDebug: (String) -> Unit
+) {
+    private val brokerUrl = "tcp://$brokerIp:$brokerPort"
+    private val clientId = MqttClient.generateClientId() + "_sub"
+    private val client = MqttClient(brokerUrl, clientId, null)
+
+    fun connect() {
+        val options = MqttConnectOptions().apply {
+            isCleanSession = true
+            connectionTimeout = 5
+            keepAliveInterval = 60
+        }
+
+        client.setCallback(object : MqttCallback {
+            override fun connectionLost(cause: Throwable?) {
+                onDebug("Subscriber connection lost: ${cause?.message}")
+            }
+
+            override fun messageArrived(topic: String?, message: MqttMessage?) {
+                val payload = message?.toString() ?: ""
+                onDebug("RX Topic: $topic | Msg: $payload")
+                onCommand(payload)
+            }
+
+            override fun deliveryComplete(token: org.eclipse.paho.client.mqttv3.IMqttDeliveryToken?) {}
+        })
+
+        client.connect(options)
+        client.subscribe("drone/commands", 1)
+        onDebug("Subscribed to drone/commands")
+    }
+
+    fun disconnect() {
+        if (client.isConnected) client.disconnect()
     }
 }

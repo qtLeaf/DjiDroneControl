@@ -10,6 +10,13 @@ import dji.v5.common.error.IDJIError
 import dji.v5.manager.aircraft.virtualstick.Stick
 import kotlin.math.abs
 
+
+/*
+* left stick -> controls yaw axis and throttle
+*
+*right stick -> controls pitch and roll axis
+*/
+
 class VirtualFlightController(
     // injected from outside
     private val basicAircraftControlVM: BasicAircraftControlVM,
@@ -91,6 +98,11 @@ class VirtualFlightController(
                 onErr?.invoke(error)
             }
         })
+    }
+
+    fun takeoffByStick() {
+        // Increase throttle to lift off
+        virtualStickVM.setLeftPosition(0, normalize(0.7f))
     }
 
     fun land(

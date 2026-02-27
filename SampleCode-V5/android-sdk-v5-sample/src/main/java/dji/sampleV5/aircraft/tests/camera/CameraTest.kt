@@ -10,13 +10,14 @@ import dji.v5.ux.core.widget.fpv.FPVWidget
 import dji.v5.ux.core.widget.fpv.FPVWidgetModel
 import dji.sdk.keyvalue.value.common.ComponentIndexType
 import dji.sdk.keyvalue.value.common.CameraLensType
+import dji.v5.et.create
 import dji.v5.manager.interfaces.ICameraStreamManager
 
-
+/*
 class CameraTest(
     fpvWidget: FPVWidget
 ) {
-/*
+
     private val fpvModel = FPVWidgetModel(
         DJISDKModel.getInstance(),
         ObservableInMemoryKeyedStore.getInstance(),
@@ -103,5 +104,5 @@ class CameraTest(
             .create(fpvModel.cameraIndex, fpvModel.lensType)
             .action {}
     }
-*/
-}
+
+}*/

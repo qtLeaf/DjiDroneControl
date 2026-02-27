@@ -2,6 +2,7 @@ package dji.sampleV5.aircraft
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Application
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -81,9 +82,6 @@ abstract class DJIMainActivity : AppCompatActivity() {
     //private var telemetryLogger: TelemetryLogger? = null
 
     //test:
-    private val MQTT_HOST = "192.168.1.3"
-    private val MQTT_PORT = 1883
-
     private lateinit var tvDebug: TextView
     private lateinit var debugScroll: ScrollView
 
@@ -257,8 +255,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
                     basicAircraftControlVM = basicVM,
                     virtualStickVM = virtualStickVM,
                     simulatorVM = simulatorVM,
-                    mqttHost = MQTT_HOST,
-                    mqttPort = MQTT_PORT,
+                    context= this,
                 ) { msg ->
                     runOnUiThread {
                         tvDebug.append(msg + " \n")
