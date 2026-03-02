@@ -461,6 +461,27 @@ class General(
                 }
                 "takeoff" -> executeTakeoff()
                 "land" -> executeLanding()
+                "stop" -> executeStop()
+                "forward" -> {
+                    val duration = json.optDouble("duration", -1.0)
+                    val speed = json.optDouble("speed", -1.0)
+
+                    if (duration > 0 && speed in 0.1..0.9) {
+                        executeForward(duration.toLong(), speed.toFloat())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }
+                }
+                "rotateRight" -> {
+                    val duration = json.optDouble("duration", -1.0)
+                    val speed = json.optDouble("speed", -1.0)
+
+                    if (duration > 0 && speed in 0.1..0.9) {
+                        executeRotateRight(duration.toLong(), speed.toFloat())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }
+                }
                 "photo" -> executeTakePhoto()
 
                 else -> debug("Unknown action: $action")
@@ -482,11 +503,11 @@ class General(
     private fun executeTakeoff() {
         debug("Remote Command: TAKEOFF")
         //virtualStickTest.run()
-        /*vfc.takeOff(
+        vfc.takeOff(
             onOk = { debug("Takeoff Successful") },
             onErr = { debug("Takeoff Failed: ${it.description()}") }
         )
-        */
+
     }
 
     private fun executeLanding() {
@@ -497,6 +518,28 @@ class General(
         )
     }
 
+    private fun executeStop(){
+        debug("Remote Command: STOP")
+        vfc.stop()
+    }
+
+    private fun executeForward(duration: Long, power : Float){
+        debug("Remote Command: FORWARD")
+        vfc.forward(power)
+
+        handler.postDelayed({
+            vfc.stop()
+        }, duration)
+    }
+
+    private fun executeRotateRight(duration: Long, power : Float){
+        debug("Remote Command: ROTATE RIGHT")
+        vfc.rotateRight(power)
+
+        handler.postDelayed({
+            vfc.stop()
+        }, duration)
+    }
     private fun executeTakePhoto() {
         debug("Remote Command: PHOTO")
         captureNextFrame.set(true)
