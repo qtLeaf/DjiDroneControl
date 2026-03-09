@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 class DroneController:
-    def __init__(self, broker_ip="192.168.1.11", broker_port=1883):
+    def __init__(self, broker_ip="172.20.10.2", broker_port=1883):
         self.broker_ip = broker_ip
         self.broker_port = broker_port
         
@@ -163,24 +163,27 @@ class DroneController:
                 cmd = line[0]
                 args = line[1:]
 
-                # todo: up/down, move four direction, rotare, orbit (and more "complex" movement), viedo - pipe of cmds
+                # todo: up/down, move four direction, rotate, orbit (and more "complex" movement), viedo - pipe of cmds
                 #       attitude settings
                 if cmd == 'h':
-                    print("t: Takeoff | l: Land | p: Photo (Live) | pg: Photo (Gallery Ping)")
-                    print("i: Ping (Simple) | q: Quit")
+                    print("takeoff | Land | stop | forward <time> <power> | backward <time> <power> | right <time> <power> | left<time> <power> ")
+                    print(" rotateright <time> <power> | rotateleft <time> <power> | up <time> <power> | down <time> <power> | orbit <time>")
+                    print("enablevs | disablevs | gimbal <pitch> <yaw> | zoom <value>") # to enable or disable the virtual stick (rn takeoff deos it automatically
+                    print(" p: photo | pg: photo (Gallery Ping) | i: Ping | q: Quit")
                 elif cmd == 'takeoff':
                     self.send_action("takeoff")
                 elif cmd == 'land':
                     self.send_action("land")
                 elif cmd == 'stop':
                     self.send_action("stop")
-                elif cmd == cmd == 'setspeed':
+                elif cmd == 'setspeed':
                     try:
                         val = float(args[0])
-                        if 0.1 <= val <= 0.9:
-                            self.send_action("speed", {"value": val})
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
+                            continue
                         else:
-                            print("Value out of range (0.1 - 0.9)")
+                            self.send_action("speed", {"value": val})
                     except (IndexError, ValueError):
                         print("Use: setspeed 0.5")
                 elif cmd == 'forward':
@@ -190,8 +193,8 @@ class DroneController:
                         if duration <= 0:
                             print("Duration must be > 0")
                             continue
-                        if not (0.1 <= speed <= 0.9):
-                            print("Speed out of range(0.1 - 0.9)")
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
                             continue
                         self.send_action(
                             "forward",
@@ -202,28 +205,201 @@ class DroneController:
                         )
                     except (IndexError, ValueError):
                         print("Use: forward 1000 0.1")
-                elif cmd == 'rotateRight':
+                
+                elif cmd == 'backward':
                     try:
                         duration = float(args[0])
                         speed = float(args[1])
                         if duration <= 0:
                             print("Duration must be > 0")
                             continue
-                        if not (0.1 <= speed <= 0.9):
-                            print("Speed out of range(0.1 - 0.9)")
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
                             continue
                         self.send_action(
-                            "rotateRight",
+                            "backwards",
                             {
                                 "duration": duration,
                                 "speed": speed
                             }
                         )
                     except (IndexError, ValueError):
-                        print("Use: forward 1000 0.1")
+                        print("Use: backward 1000 0.1")
                 
+                elif cmd == 'right':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
+                            continue
+                        self.send_action(
+                            "right",
+                            {
+                                "duration": duration,
+                                "speed": speed
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: right 1000 0.1")
+                
+                elif cmd == 'left':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
+                            continue
+                        self.send_action(
+                            "left",
+                            {
+                                "duration": duration,
+                                "speed": speed
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: left 1000 0.1")
+
+                elif cmd == 'rotateright':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
+                            continue
+                        self.send_action(
+                            "rotateright",
+                            {
+                                "duration": duration,
+                                "speed": speed
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: rotateright 1000 0.1")
+                
+                elif cmd == 'rotateleft':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
+                            continue
+                        self.send_action(
+                            "rotateleft",
+                            {
+                                "duration": duration,
+                                "speed": speed
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: rotateleft 1000 0.1")
+
+                elif cmd == 'up':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                        if not (0 < speed <= 1.0):
+                            print("Speed must be > 0 and <= 1.0")
+                            continue
+                        self.send_action(
+                            "up",
+                            {
+                                "duration": duration,
+                                "speed": speed
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: up 1000 0.1")
+
+                elif cmd == 'down':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                        if not (0. <= speed <= 1.0):
+                            print("Speed out of range(0 - 1.0)")
+                            continue
+                        self.send_action(
+                            "down",
+                            {
+                                "duration": duration,
+                                "speed": speed
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: down 1000 0.1")
+
+                elif cmd == 'orbit':
+                    try:
+                        duration = float(args[0])
+                        speed = float(args[1])
+                        if duration <= 0:
+                            print("Duration must be > 0")
+                            continue
+                    
+                        self.send_action(
+                            "orbit",
+                            {
+                                "duration": duration,
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: down 1000 0.1")
+
                 elif cmd == 'stop':
                     self.send_action("stop")
+                elif cmd == 'gimbal':
+                    try:
+                        pitch = float(args[0])
+                        yaw = float(args[1])
+                        
+                        if not (-90 <= pitch <= 30):
+                            print("Pitch range: -90 to 30")
+                            continue
+                            
+                        self.send_action(
+                            "gimbal",
+                            {
+                                "pitch": pitch,
+                                "yaw": yaw
+                            }
+                        )
+                        
+                    except (IndexError, ValueError):
+                        print("Use: gimbal -45 0")
+                elif cmd == 'zoom':
+                    try:
+                        val = float(args[0])
+                        
+                        if val < 1:
+                            print("Zoom must be >= 1") #2.0 max for 4k, 4.0 max for 1080p
+                            continue
+                            
+                        self.send_action(
+                            "zoom",
+                            {
+                                "value": val
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: zoom 2.0")
                 elif cmd == 'photo':
                     self.send_action("photo")
                 elif cmd == 'pg':
@@ -232,6 +408,10 @@ class DroneController:
                     self.send_action("ping")
                 elif cmd == 'q':
                     self.running = False
+                elif cmd == 'enablevs':
+                    self.send_action("enablevs")
+                elif cmd == 'disablevs':
+                    self.send_action("disablevs")
                 elif cmd == '':
                     continue
                 else:
