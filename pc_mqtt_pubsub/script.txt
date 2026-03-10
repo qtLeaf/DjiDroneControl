@@ -1,0 +1,34 @@
+// file pass path 
+
+- take off h:0.7m 30°  start video   move left
+- h:1.0m 45°  move right
+- h:1.5m 60°  move left
+
+- rotate to other side
+
+- h:0.7m 30°   move left
+- h:1.0m 45°  move right
+- h:1.5m 60°  move left
+
+- rotate by 90° and get to the center
+- upper view: h:2.0 60° 
+
+- look for land
+
+2.6m
+|p p p p p p
+|p p p p p p
+ ------------ 4m.    (p= pot (don't know how many))
+
+pot + plant height= 11 + 9.5 = 20.5
+sqaure on table are large 5,6 cm
+
+better fi get closer more drone goes up
+
+
+forward 1000 0.1 // i know the time, so i can set the next move after the copletition
+backward 2000 0.1 // just after take off i should wait a few
+
+
+
+stop
