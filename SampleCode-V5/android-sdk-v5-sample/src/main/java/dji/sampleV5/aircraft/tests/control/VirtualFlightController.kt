@@ -12,9 +12,9 @@ import kotlin.math.abs
 
 
 /*
-* left stick -> controls yaw axis and throttle
+* left stick (= setLeftPosition) -> controls yaw axis and throttle
 *
-*right stick -> controls pitch and roll axis
+*  right stick (= setRightPosition) -> controls pitch and roll axis
 */
 
 class VirtualFlightController(
@@ -22,10 +22,9 @@ class VirtualFlightController(
     private val basicAircraftControlVM: BasicAircraftControlVM,
     private val virtualStickVM: VirtualStickVM,
     private val simulatorVM: SimulatorVM,
-
+    private val deadZone: Float = 0.002f //minimum speed
 ) {
 
-    private val deviation: Double = 0.02
     private val max = Stick.MAX_STICK_POSITION_ABS
 
     // ----- Speed -----
@@ -133,8 +132,7 @@ class VirtualFlightController(
     // ----- Helpers -----
 
     private fun normalize(value: Float): Int {
-        val absVal = if (abs(value) < deviation) 0f else value
-        return (absVal.coerceIn(-1f, 1f) * max).toInt()
+        val filtered = if (abs(value) < deadZone) 0f else value
+        return (filtered.coerceIn(-1f, 1f) * max).toInt()
     }
-
 }

@@ -43,7 +43,10 @@ import java.io.ByteArrayOutputStream
 
 import java.io.File
 import android.util.Base64
+import dji.sampleV5.aircraft.tests.camera.CameraGimbalController
+import dji.sdk.keyvalue.key.GimbalKey
 import dji.sdk.keyvalue.value.common.LocationCoordinate3D
+import dji.sdk.keyvalue.value.gimbal.GimbalAngleRotation
 import java.util.concurrent.atomic.AtomicBoolean
 
 //mosquitto -c ~/mosquitto.conf
@@ -51,6 +54,43 @@ import java.util.concurrent.atomic.AtomicBoolean
 //  listener 1883 0.0.0.0
 //  allow_anonymous true
 
+/**
+ * Central controller used for automated drone testing and remote control.
+ *
+ * Responsibilities:
+ * - Manage MQTT communication with a remote PC
+ * - Periodically publish drone telemetry (location and attitude)
+ * - Receive remote commands and translate them into drone actions
+ * - Control drone movement using Virtual Stick
+ * - Capture camera frames and send them via MQTT
+ * - Control gimbal orientation and zoom
+ *
+ * The class acts as a bridge between:
+ * - DJI SDK flight and camera APIs
+ * - An MQTT-based remote control protocol
+ *
+ * Communication Model:
+ * PC  <--MQTT-->  Drone
+ *
+ * Incoming commands are received through MQTT and handled in
+ * [handleRemoteCommand]. Supported commands include:
+ *
+ * - takeoff
+ * - land
+ * - movement (forward, backward, left, right, rotate)
+ * - gimbal control
+ * - zoom
+ * - photo capture
+ * - ping tests
+ *
+ * Telemetry is periodically published using [telemetryTask].
+ *
+ * @param basicAircraftControlVM DJI view model for aircraft basic controls
+ * @param virtualStickVM DJI view model for virtual stick control
+ * @param simulatorVM simulator interface used for testing
+ * @param context Android context used for accessing media and system services
+ * @param onDebug callback used to output debug messages
+ */
 class General(
     private val basicAircraftControlVM: BasicAircraftControlVM,
     private val virtualStickVM: VirtualStickVM,
@@ -76,6 +116,17 @@ class General(
         MediaDataCenter.getInstance().cameraStreamManager
     }
 
+    /**
+     * Starts the telemetry and remote control system.
+     *
+     * Actions performed:
+     * - Establish MQTT connection
+     * - Start the telemetry publishing loop
+     * - Subscribe to remote commands
+     * - Start camera frame listener
+     *
+     * If the system is already running, the method exits without restarting it.
+     */
     fun startTelemetryTest() {
         if (running) {
             debug("Test already started")
@@ -111,6 +162,14 @@ class General(
         }
     }
 
+    /**
+     * Stops the telemetry system and closes the MQTT connection.
+     *
+     * This will:
+     * - Stop telemetry publishing
+     * - Remove scheduled tasks
+     * - Disconnect MQTT publisher
+     */
     fun stopTelemetryTest() {
         if (!running) return
 
@@ -120,6 +179,16 @@ class General(
         debug("Test stopped")
     }
 
+
+    /**
+     * Periodic telemetry publisher.
+     *
+     * Every 200 ms it reads:
+     * - aircraft location
+     * - aircraft attitude
+     *
+     * and sends them to the MQTT broker using [mqttPublisher].
+     */
     private val telemetryTask = object : Runnable {
         override fun run() {
             if (!running) return
@@ -143,7 +212,8 @@ class General(
                     //debug("Telemetry not available -- location or attitude problems")
                 } else {
                     mqttPublisher.publishTelemetry(location, attitude)
-                    /*val json = mqttPublisher.publishTelemetry(location, attitude)
+                    /* for debug
+                    val json = mqttPublisher.publishTelemetry(location, attitude)
                     debug("TX: $json")
                      */
                 }
@@ -156,12 +226,15 @@ class General(
         }
     }
 
+    // Initialize the virtual stick
     private val vfc = VirtualFlightController(
         basicAircraftControlVM,
         virtualStickVM,
-        simulatorVM
+        simulatorVM,
+        deadZone = 0.0005f//mimum speed
     )
-    private val virtualStickTest = object : Runnable {
+
+    private val virtualStickTakeOff = object : Runnable {
         override fun run() {
             if (!running) return
 
@@ -193,6 +266,7 @@ class General(
         }
 
         private var retryCount = 0
+        //retry multiple times in case of errors
         private fun checkStateAndStart() {
             val state = virtualStickVM.currentVirtualStickStateInfo.value?.state
 
@@ -221,65 +295,26 @@ class General(
                     debug("Takeoff successful. Waiting to reach safe altitude...")
                     // wait a 6-8 sec for hovering (1.2m)
                     //handler.postDelayed({ moveForward() }, 8000)
-                    handler.postDelayed({ land() }, 8000)
+                    //handler.postDelayed({ land() }, 8000)
                     //handler.postDelayed({ orbitStep() }, 8000)
 
                 },
                 onErr = {
                     debug("takeoff FAILED: ${it.description()}")
-                    stopTelemetryTest()
-                }
-            )
-        }
-
-        private fun moveForward() {
-            if (!running) return
-            debug("Moving forward")
-
-            vfc.setSpeed(0.1) // 10% of max speed
-            vfc.forward(0.1f)
-
-            handler.postDelayed({
-                vfc.stop()
-                debug("Stopping")
-                handler.postDelayed({ land() }, 2000)
-            }, 1000) // move for 1 sec
-        }
-
-        private fun orbitStep() {
-            if (!running) return
-            debug("Start Orbit")
-
-            // low speed
-            vfc.setSpeed(0.1)
-
-            vfc.right(0.2f) // moving lateral
-            vfc.rotateLeft(0.15f) // opposite direction to lock front
-
-            handler.postDelayed({
-                vfc.stop()
-                debug("Movement completed. Stableizing")
-                handler.postDelayed({ land() }, 2000)
-            }, 5000)
-        }
-
-        private fun land() {
-            if (!running) return
-            debug("Executing Landing via VFC...")
-
-            vfc.land(
-                onOk = {
-                    debug("Landing initiated successfully")
-                    stopTelemetryTest()
-                },
-                onErr = { error ->
-                    debug("Landing error: ${error.description()}. EMERGENCY: Forcing descent.")
-                    //in case of fail -> force descent
-                    vfc.down(0.5f)
                 }
             )
         }
     }
+
+    // camera functions (not working)
+    /**
+     * Starts a camera frame listener using DJI CameraStreamManager.
+     *
+     * Frames are received in YUV format and converted to JPEG when
+     * [captureNextFrame] is triggered.
+     *
+     * The resulting JPEG image is sent through MQTT.
+     */
 
     private fun startCameraFrameListener() {
         cameraStreamManager.addFrameListener(
@@ -423,7 +458,7 @@ class General(
 
             override fun onFinish() {
                 debug("File downloaded: ${destFile.absolutePath}")
-                // 3. QUI PUOI INVIARE IL FILE (es. via MQTT come Base64 o caricamento HTTP)
+                //  QUI PUOI INVIARE IL FILE (es. via MQTT come Base64 o caricamento HTTP)
                 debug("Download completato: ${destFile.absolutePath}")
                 sendPhotoToMqtt(destFile)
             }
@@ -442,12 +477,51 @@ class General(
     }
     */
 
+    //here is where the commands are received from the PC and sent to the drone
     private var mqttSubscriber: MqttSubscriber? = null
 
-    private fun handleRemoteCommand(payload: String) {//coming msgs
+    private val gimbalController = CameraGimbalController { msg -> debug(msg) }
+
+    /**
+     * Parses and executes remote commands received via MQTT.
+     *
+     * Commands are sent as JSON objects with the structure:
+     *
+     * {
+     *   "action": "forward",
+     *   "duration": 2000,
+     *   "speed": 0.5
+     * }
+     *
+     * Supported categories:
+     *
+     * Flight control:
+     * - takeoff
+     * - land
+     * - stop
+     * - forward / backward
+     * - left / right
+     * - up / down
+     * - rotateleft / rotateright
+     *
+     * Camera:
+     * - photo
+     * - zoom
+     *
+     * Gimbal:
+     * - gimbal (pitch, yaw)
+     *
+     * Diagnostics:
+     * - ping
+     * - p-photo
+     */
+    private fun handleRemoteCommand(payload: String) {//coming msg
         try {
             val json = JSONObject(payload)
             val action = json.optString("action").lowercase()
+
+            val duration =  json.optDouble("duration", -1.0)
+            val speed = json.optDouble("speed", -1.0)
 
             when (action) {
                 "p-photo" ->{
@@ -459,29 +533,138 @@ class General(
                     val timestamp = json.optLong("timestamp")
                     sendPing(timestamp)
                 }
+                "enablevs" -> executeVSenable()
+                "disablevs" -> executeVSdisable()
+                //---- DRONE MOVEMENT -----
                 "takeoff" -> executeTakeoff()
                 "land" -> executeLanding()
-                "stop" -> executeStop()
+                "stop" -> {
+                    debug("Remote Command: STOP")
+                    vfc.stop()
+                }
                 "forward" -> {
-                    val duration = json.optDouble("duration", -1.0)
-                    val speed = json.optDouble("speed", -1.0)
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: FORWARD")
+                        vfc.forward(speed.toFloat())
 
-                    if (duration > 0 && speed in 0.1..0.9) {
-                        executeForward(duration.toLong(), speed.toFloat())
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
                     } else {
                         debug("Invalid forward parameters")
-                    }
-                }
-                "rotateRight" -> {
-                    val duration = json.optDouble("duration", -1.0)
-                    val speed = json.optDouble("speed", -1.0)
+                    }}
+                "backwards" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: BACKWARD")
+                        vfc.backward(speed.toFloat())
 
-                    if (duration > 0 && speed in 0.1..0.9) {
-                        executeRotateRight(duration.toLong(), speed.toFloat())
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
                     } else {
                         debug("Invalid forward parameters")
+                    }}
+
+                "right" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: ROTATE RIGHT")
+                        vfc.right(speed.toFloat())
+
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }}
+                "left" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: ROTATE LEFT")
+                        vfc.left(speed.toFloat())
+
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }}
+                "rotateright" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: ROTATE RIGHT")
+                        vfc.rotateRight(speed.toFloat())
+
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }}
+                "rotateleft" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: ROTATE LEFT")
+                        vfc.rotateLeft(speed.toFloat())
+
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }}
+                "up" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: UP")
+                        vfc.up(speed.toFloat())
+
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }}
+                "down" -> {
+                    if (duration > 0 && speed > 0 && speed <= 1.0) {
+                        debug("Remote Command: DOWN")
+                        vfc.down(speed.toFloat())
+                        handler.postDelayed({
+                            vfc.stop()
+                        }, duration.toLong())
+                    } else {
+                        debug("Invalid forward parameters")
+                    }}
+                "orbit" -> {
+                    if (duration > 0) {
+                        debug("Remote Command: Start Orbit")
+                        vfc.right(0.2f) // moving lateral
+                        vfc.rotateLeft(0.15f) // opposite direction to lock front
+                        handler.postDelayed({
+                            vfc.stop()
+                            debug("Movement completed")
+                        }, duration.toLong())
                     }
                 }
+                //---- CAMERA GIMBAL -----
+
+                "gimbal" -> {
+
+                    val pitch = json.optDouble("pitch", 0.0)
+                    val yaw = json.optDouble("yaw", 0.0)
+
+                    debug("Remote Command: GIMBAL P:$pitch Y:$yaw")
+
+                    gimbalController.rotateTo(
+                        pitch = pitch,
+                        yaw = yaw
+                    )
+                }
+                "zoom" -> {
+
+                    val zoom = json.optDouble("value", 1.0)
+
+                    debug("Remote Command: ZOOM $zoom")
+
+                    gimbalController.setZoom(zoom)
+                }
+
+
                 "photo" -> executeTakePhoto()
 
                 else -> debug("Unknown action: $action")
@@ -491,6 +674,13 @@ class General(
         }
     }
 
+    /**
+     * Sends a ping response back to the PC to measure communication latency.
+     *
+     * The response includes:
+     * - original PC timestamp
+     * - time when the drone received the message
+     */
     private fun sendPing(originalTimestamp: Long) {
         val response = JSONObject().apply {
             put("action", "ping")
@@ -500,16 +690,19 @@ class General(
         mqttPublisher.publish("drone/ping", response.toString())
     }
 
+    /**
+     * Execute takeoff
+     */
     private fun executeTakeoff() {
         debug("Remote Command: TAKEOFF")
         //virtualStickTest.run()
-        vfc.takeOff(
-            onOk = { debug("Takeoff Successful") },
-            onErr = { debug("Takeoff Failed: ${it.description()}") }
-        )
+        virtualStickTakeOff.run()
 
     }
 
+    /**
+     * Execute landing
+     */
     private fun executeLanding() {
         debug("Remote Command: LAND")
         vfc.land(
@@ -518,28 +711,39 @@ class General(
         )
     }
 
-    private fun executeStop(){
-        debug("Remote Command: STOP")
-        vfc.stop()
+    /**
+     * Enable Virtual Stick
+     */
+    private fun executeVSenable(){
+        debug("Remote Command: ENABLE VS")
+        virtualStickVM.enableVirtualStick(object : CommonCallbacks.CompletionCallback {
+            override fun onSuccess() {
+                debug("VS Enabled successfully")
+            }
+            override fun onFailure(error: IDJIError) {
+                debug("Failed to enable VS")
+            }
+        })
     }
 
-    private fun executeForward(duration: Long, power : Float){
-        debug("Remote Command: FORWARD")
-        vfc.forward(power)
+    /**
+     * Disable Virtual Stick
+     */
+    private fun executeVSdisable(){
+        debug("Remote Command: DISABLE VS")
+        virtualStickVM.disableVirtualStick(object : CommonCallbacks.CompletionCallback {
+            override fun onSuccess() {
+                debug("Disabled successfully")
+            }
+            override fun onFailure(error: IDJIError) {
+                debug("Failed to disable")
+            }
+        })
 
-        handler.postDelayed({
-            vfc.stop()
-        }, duration)
     }
 
-    private fun executeRotateRight(duration: Long, power : Float){
-        debug("Remote Command: ROTATE RIGHT")
-        vfc.rotateRight(power)
 
-        handler.postDelayed({
-            vfc.stop()
-        }, duration)
-    }
+
     private fun executeTakePhoto() {
         debug("Remote Command: PHOTO")
         captureNextFrame.set(true)
@@ -581,7 +785,7 @@ class General(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,
             null,
-                null,
+            null,
             "${MediaStore.Images.Media.DATE_TAKEN} DESC"
         )
 
@@ -602,6 +806,9 @@ class General(
         return location
     }
 
+    /**
+     * Returns whether the telemetry test system is currently active.
+     */
     fun isRunning(): Boolean = running
 
 
