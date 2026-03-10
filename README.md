@@ -8,13 +8,19 @@ The goal is to experiment with autonomous flight logic and real-time data record
    - IMU data (accelerometer and gyroscope bias, temperature)
    - Battery level
  
-- Able to make automated movements with virualstick (in a raw state)
+- Able to make automated movements with virtual stick (in a raw state)
 
-- Able to sent telemetry with mqtt to another machine (usinf pc_mqtt_pubsub.py)
+- Able to send telemetry with mqtt to another machine (using pc_mqtt_pubsub.py)
      
- In future progress it should have a better movements options of drone and camere, 
- be able to take photos/videos and send them trought mqtt
+ In future progress it should have a better movements options of drone and camera, 
+ be able to take photos/videos and send them through mqtt
 
-To set the application open the project in android of "SampleCode-V5/android-sdk-v5-as" - suggest to use Android Studio Meerkat | 2024.3.1 Patch 1
-After the set the API keys in "SampleCode-V5/android-sdk-v5-as/gradle.properties"
+To set the application open the project in android of "SampleCode-V5/android-sdk-v5-as" - suggest to use Android Studio Meerkat | 2024.3.1 Patch 1 -
+
+Make sure to have at least java 17 in Setting -> Build, Execution, Deployment -> Build Tools -> Gradle  in Gradle JDK section.
+
+After, set the API keys in "SampleCode-V5/android-sdk-v5-as/gradle.properties", and Sync the project and build it to make sure everything works.
+
+
+
 
