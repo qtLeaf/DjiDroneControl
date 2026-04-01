@@ -99,11 +99,9 @@ class General(
     private val onDebug: (String) -> Unit
 ) {
 
-    private val mqttPublisher = MqttPublisher(
-        brokerIp = MqttConfig.HOST,
-        brokerPort = MqttConfig.PORT
-    )
+    private var mqttPublisher : MqttPublisher? = null
 
+    private var mqttSubscriber: MqttSubscriber? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private var running = false
@@ -128,37 +126,36 @@ class General(
      * If the system is already running, the method exits without restarting it.
      */
     fun startTelemetryTest() {
-        if (running) {
-            debug("Test already started")
-            return
+        if (running) return
+
+        debug("Starting services for ${MqttConfig.HOST}...")
+
+        // Connect to Publisher
+        try {
+            mqttPublisher = MqttPublisher()
+            mqttPublisher?.connect()
+        } catch (e: Exception) {
+            debug("Publisher issue: ${e.message}")
         }
 
-        debug("Connection MQTT to ${MqttConfig.HOST} : ${MqttConfig.PORT}")
-
+        // Connect to Subscriber
         try {
-            mqttPublisher.connect()
-            running = true
-
             mqttSubscriber = MqttSubscriber(
-                brokerIp = MqttConfig.HOST,
-                brokerPort = MqttConfig.PORT,
                 onCommand = { payload ->
                     // activates for each msg arrive
                     handleRemoteCommand(payload)
                 },
                 onDebug = { msg -> debug(msg) }
             )
-            mqttSubscriber?.connect()
 
-            //initMediaManager(cameraIndex)
+            mqttSubscriber?.connect()
+            running = true
+
             telemetryTask.run()
             startCameraFrameListener()
-            //photoTask.run()
-            //virtualStickTest.run()
-            debug("Test started")
-
+            debug("Test started successfully")
         } catch (e: Exception) {
-            debug("Error MQTT: ${e.message}")
+            debug("Subscriber critical error: ${e.message}")
         }
     }
 
@@ -175,7 +172,8 @@ class General(
 
         running = false
         handler.removeCallbacks(telemetryTask)
-        mqttPublisher.disconnect()
+        mqttPublisher?.disconnect()
+        mqttSubscriber?.disconnect()
         debug("Test stopped")
     }
 
@@ -211,7 +209,7 @@ class General(
                 if (location == null || attitude == null) {
                     //debug("Telemetry not available -- location or attitude problems")
                 } else {
-                    mqttPublisher.publishTelemetry(location, attitude)
+                    mqttPublisher?.publishTelemetry(location, attitude)
                     /* for debug
                     val json = mqttPublisher.publishTelemetry(location, attitude)
                     debug("TX: $json")
@@ -306,179 +304,111 @@ class General(
         }
     }
 
-    // camera functions (not working)
     /**
      * Starts a camera frame listener using DJI CameraStreamManager.
      *
-     * Frames are received in YUV format and converted to JPEG when
-     * [captureNextFrame] is triggered.
-     *
-     * The resulting JPEG image is sent through MQTT.
+     * Frames are monitored in YUV format. When [captureNextFrame] is toggled to true
+     * by an MQTT command, the next available frame is intercepted, corrected for
+     * color alignment (YUV Planar to NV21), compressed to JPEG, and published.
      */
-
     private fun startCameraFrameListener() {
+        debug("Camera Frame Listener initialized. Waiting for 'photo' command...")
+
         cameraStreamManager.addFrameListener(
             cameraIndex,
-            ICameraStreamManager.FrameFormat.YUV420_888
-        ) { data, width, height, offset, length, format ->
+            ICameraStreamManager.FrameFormat.NV21
+        ) { data, width, height, _, _, _ ->
 
-            if (width <= 0 || height <= 0 || data.isEmpty()) {
+            // Only process if the "photo" command was recently received
+            if (!captureNextFrame.get()) return@addFrameListener
+
+            // Reset the flag immediately to capture a single shot
+            captureNextFrame.set(false)
+
+            if (data == null || data.isEmpty()) {
+                debug("Capture Error: Received empty buffer")
                 return@addFrameListener
             }
 
-            if (!captureNextFrame.get()) return@addFrameListener
+            var realWidth = width
+            var realHeight = height
 
-            captureNextFrame.set(false)
-
-            try {
-                val jpeg = convertFrameToJpeg(data, width, height)
-                mqttPublisher.publishPhoto(jpeg)
-                debug("Photo sent to MQTT (${width}x${height})")
-            } catch (e: Exception) {
-                debug("Frame capture error: ${e.message}")
+            if (realWidth <= 0 || realHeight <= 0) {
+                when (data.size) {
+                    1382400 -> { realWidth = 1280; realHeight = 720 }   // 720p
+                    3110400 -> { realWidth = 1920; realHeight = 1080 }  // 1080p
+                    else -> {
+                        debug("Capture Error: Unknown buffer size (${data.size})")
+                        return@addFrameListener
+                    }
+                }
             }
+
+            // Perform compression and network transmission in a background thread
+            // to prevent stuttering in the drone's video feed.
+            Thread {
+                try {
+                    val jpeg = convertYuvToJpeg(data, realWidth, realHeight)
+                    if (jpeg != null) {
+                        mqttPublisher?.publishPhoto(jpeg)
+                        debug("Photo sent-  Resolution: ${realWidth}x${realHeight}")
+                    } else {
+                        debug("Conversion Error: JPEG compression failed")
+                    }
+                } catch (e: Exception) {
+                    debug("Processing Error: ${e.message}")
+                }
+            }.start()
         }
     }
 
-    private fun convertFrameToJpeg(
-        data: ByteArray,
-        width: Int,
-        height: Int
-    ): ByteArray {
+    /**
+     * Converts raw YUV data from the DJI SDK into a JPEG ByteArray.
+     * This method specifically fixes the "purple/green" tint by reordering
+     * Planar YUV420 pixels into the Interleaved NV21 format required by Android.
+     */
+    private fun convertYuvToJpeg(data: ByteArray, width: Int, height: Int): ByteArray? {
+        return try {
+            val out = ByteArrayOutputStream()
+            val frameSize = width * height
+            val expectedSize = frameSize * 3 / 2
 
-        val yuv = YuvImage(
-            data,
-            ImageFormat.NV21,
-            width,
-            height,
+            // Prepare a new buffer for the NV21 format
+            val nv21 = ByteArray(expectedSize)
+
+            //copy the Y (Luminance) plane - identical in both formats
+            System.arraycopy(data, 0, nv21, 0, frameSize)
+
+            // interleave the U and V (Chroma) planes
+            // DJI sends Y-U-V (Planar). NV21 expects Y-VU-VU (Interleaved).
+            val uPlane = frameSize
+            val vPlane = frameSize + (frameSize / 4)
+
+            for (i in 0 until (frameSize / 4)) {
+                // NV21 pattern: V, then U
+                nv21[frameSize + i * 2] = data[vPlane + i]
+                nv21[frameSize + i * 2 + 1] = data[uPlane + i]
+            }
+
+            val yuvImage = YuvImage(
+                nv21,
+                ImageFormat.NV21,
+                width,
+                height,
+                null
+            )
+
+            // Compress at 70% quality to balance clarity and MQTT message size
+            if (yuvImage.compressToJpeg(Rect(0, 0, width, height), 70, out)) {
+                out.toByteArray()
+            } else null
+        } catch (e: Exception) {
             null
-        )
-
-        val out = ByteArrayOutputStream()
-        yuv.compressToJpeg(
-            Rect(0, 0, width, height),
-            60,
-            out
-        )
-
-        return out.toByteArray()
+        }
     }
 
-
-
-    /*
-    private fun prepareCameraAndShoot() {
-        val cameraModeKey = CameraKey.KeyCameraMode.create(cameraIndex)
-
-        // Assicuriamoci di essere in modalità PHOTO
-        KeyManager.getInstance().setValue(cameraModeKey, CameraMode.PHOTO_NORMAL, object : CommonCallbacks.CompletionCallback {
-            override fun onSuccess() {
-                debug("Camera mode set to PHOTO. Waiting 1s to stabilize...")
-                // Diamo tempo al sistema di stabilizzare la modalità prima di scattare
-                handler.postDelayed({
-                    shootPhoto()
-                }, 1000)
-            }
-
-            override fun onFailure(error: IDJIError) {
-                debug("Failed to set camera mode: ${error.description()}")
-            }
-        })
-    }
-
-    private fun shootPhoto() {
-        val shootPhotoKey = CameraKey.KeyStartShootPhoto.create(cameraIndex)
-
-        debug("Inviando comando StartShootPhoto...")
-        KeyManager.getInstance().performAction(shootPhotoKey, object : CompletionCallbackWithParam<EmptyMsg> {
-            override fun onSuccess(p0: EmptyMsg?) {
-                debug("Photo taken successfully!")
-                handler.postDelayed({ listenForNewPhoto() }, 2000)
-            }
-
-            override fun onFailure(error: IDJIError) {
-                // Se l'errore è null, proviamo a capire se è un problema di storage
-                val errorMsg = error.description() ?: "Unknown Error (null)"
-                debug("Shoot photo failed: $errorMsg")
-
-                if (errorMsg == "null") {
-                    debug("Suggerimento: Verifica che la MicroSD sia inserita o che lo storage interno non sia pieno.")
-                }
-            }
-        })
-    }
-
-    private fun listenForNewPhoto() {
-        val mediaManager = MediaDataCenter.getInstance().mediaManager
-
-        // Parametri per recuperare la lista file (prendiamo gli ultimi 5 per sicurezza)
-        val pullParam = PullMediaFileListParam.Builder()
-            .count(5)
-            .mediaFileIndex(0)
-            .build()
-
-
-        mediaManager.pullMediaFileListFromCamera( pullParam, object : CommonCallbacks.CompletionCallback {
-
-            override fun onSuccess() {
-                debug("Pull success. Fetching files...")
-
-                val mediaFiles = mediaManager.mediaFileListData.data
-
-                val lastFile = mediaFiles?.firstOrNull()
-
-                if (lastFile != null) {
-                    debug("File found: ${lastFile.fileName}")
-                    downloadMediaFile(lastFile)
-                } else {
-                    debug("List is empty after pull")
-                }
-            }
-
-            override fun onFailure(error: IDJIError) {
-                debug("Failed to pull media list: ${error.description()}")
-            }
-        })
-    }
-
-    private fun downloadMediaFile(mediaFile: MediaFile) {
-        // Definiamo dove salvare il file nello smartphone
-        val destFile = File(context.cacheDir, mediaFile.fileName)
-
-        mediaFile.pullOriginalMediaFileFromCamera(0L, object : MediaFileDownloadListener {
-            override fun onStart() {
-                debug("Download started: ${mediaFile.fileName}")
-            }
-
-            override fun onProgress(total: Long, current: Long) {
-            }
-
-            override fun onRealtimeDataUpdate(data: ByteArray?, position: Long) {
-            }
-
-            override fun onFinish() {
-                debug("File downloaded: ${destFile.absolutePath}")
-                //  QUI PUOI INVIARE IL FILE (es. via MQTT come Base64 o caricamento HTTP)
-                debug("Download completato: ${destFile.absolutePath}")
-                sendPhotoToMqtt(destFile)
-            }
-
-            override fun onFailure(error: IDJIError) {
-                debug("Download failed: ${error.description()}")
-            }
-        })
-    }
-
-    private fun sendPhotoToMqtt(file: File) {
-        // Esempio: Leggi il file e invialo (Attenzione: MQTT non è ideale per file grandi, meglio Base64 o upload URL)
-        val bytes = file.readBytes()
-        debug("Photo ready to be sent. Size: ${bytes.size} bytes")
-        // Implementa qui la tua logica di pubblicazione (es. mqttPublisher.publishPhoto(bytes))
-    }
-    */
 
     //here is where the commands are received from the PC and sent to the drone
-    private var mqttSubscriber: MqttSubscriber? = null
 
     private val gimbalController = CameraGimbalController { msg -> debug(msg) }
 
@@ -533,9 +463,11 @@ class General(
                     val timestamp = json.optLong("timestamp")
                     sendPing(timestamp)
                 }
+
+                //---- DRONE MOVEMENT -----
                 "enablevs" -> executeVSenable()
                 "disablevs" -> executeVSdisable()
-                //---- DRONE MOVEMENT -----
+
                 "takeoff" -> executeTakeoff()
                 "land" -> executeLanding()
                 "stop" -> {
@@ -564,7 +496,6 @@ class General(
                     } else {
                         debug("Invalid forward parameters")
                     }}
-
                 "right" -> {
                     if (duration > 0 && speed > 0 && speed <= 1.0) {
                         debug("Remote Command: ROTATE RIGHT")
@@ -644,26 +575,19 @@ class General(
                 //---- CAMERA GIMBAL -----
 
                 "gimbal" -> {
-
                     val pitch = json.optDouble("pitch", 0.0)
                     val yaw = json.optDouble("yaw", 0.0)
-
                     debug("Remote Command: GIMBAL P:$pitch Y:$yaw")
-
                     gimbalController.rotateTo(
                         pitch = pitch,
                         yaw = yaw
                     )
                 }
                 "zoom" -> {
-
                     val zoom = json.optDouble("value", 1.0)
-
                     debug("Remote Command: ZOOM $zoom")
-
                     gimbalController.setZoom(zoom)
                 }
-
 
                 "photo" -> executeTakePhoto()
 
@@ -687,7 +611,7 @@ class General(
             put("timestamp", originalTimestamp)
             put("drone_received_at", System.currentTimeMillis())
         }
-        mqttPublisher.publish("drone/ping", response.toString())
+        mqttPublisher?.publish("drone/ping", response.toString())
     }
 
     /**
@@ -776,7 +700,7 @@ class General(
             put("photo_base64", Base64.encodeToString(finalJpeg, Base64.NO_WRAP))
         }
 
-        mqttPublisher.publish("drone/ping_test", payload.toString())
+        mqttPublisher?.publish("drone/ping_test", payload.toString())
     }
 
     private fun getLastPhotoFromGallery(): ByteArray? {

@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 class DroneController:
-    def __init__(self, broker_ip="172.20.10.2", broker_port=1883):
+    def __init__(self, broker_ip="192.168.1.9", broker_port=1883):
         self.broker_ip = broker_ip
         self.broker_port = broker_port
         

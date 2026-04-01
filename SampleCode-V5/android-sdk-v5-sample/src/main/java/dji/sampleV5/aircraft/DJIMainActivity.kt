@@ -2,15 +2,13 @@ package dji.sampleV5.aircraft
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.app.Application
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.view.View
-import android.widget.ScrollView
-import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -21,7 +19,6 @@ import dji.sampleV5.aircraft.models.MSDKInfoVm
 import dji.sampleV5.aircraft.models.MSDKManagerVM
 import dji.sampleV5.aircraft.models.globalViewModels
 import dji.sampleV5.aircraft.tests.General
-import dji.sampleV5.aircraft.util.Helper
 import dji.sampleV5.aircraft.util.ToastUtils
 import dji.v5.utils.common.LogUtils
 import dji.v5.utils.common.PermissionUtil
@@ -31,12 +28,9 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable
 import dji.sampleV5.aircraft.models.BasicAircraftControlVM
 import dji.sampleV5.aircraft.models.VirtualStickVM
 import dji.sampleV5.aircraft.models.SimulatorVM
-import dji.v5.utils.common.ThreadUtil
-
+import dji.sampleV5.aircraft.tests.config.MqttConfig.setHost
 import dji.v5.utils.common.ThreadUtil.runOnUiThread
-import kotlin.text.append
 
-//import dji.sampleV5.aircraft.logging.TelemetryLogger
 /**
  * Class Description
  *
@@ -45,16 +39,11 @@ import kotlin.text.append
  *
  * Copyright (c) 2022, DJI All Rights Reserved.
  */
-
-
-
-
 abstract class DJIMainActivity : AppCompatActivity() {
 
     val tag: String = LogUtils.getTag(this)
     private val permissionArray = arrayListOf(
         Manifest.permission.RECORD_AUDIO,
-        Manifest.permission.KILL_BACKGROUND_PROCESSES,
         Manifest.permission.ACCESS_COARSE_LOCATION,
         Manifest.permission.ACCESS_FINE_LOCATION,
     )
@@ -79,20 +68,9 @@ abstract class DJIMainActivity : AppCompatActivity() {
     private val handler: Handler = Handler(Looper.getMainLooper())
     private val disposable = CompositeDisposable()
 
-    //private var telemetryLogger: TelemetryLogger? = null
-
-    //test:
-    private lateinit var tvDebug: TextView
-    private lateinit var debugScroll: ScrollView
-
-
-    private var general: General?= null
-
-
-    //-test
+    private var general: General? = null
 
     abstract fun prepareUxActivity()
-
     abstract fun prepareTestingToolsActivity()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,34 +78,11 @@ abstract class DJIMainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        //test button & text view
-        debugScroll = findViewById(R.id.debug_scroll)
-        tvDebug = findViewById(R.id.tvDebug)
-
-        binding.btnStartGeneralTest.setOnClickListener {
-            val g = general
-            if (g == null) {
-                tvDebug.append("General test not initialized\n")
-                return@setOnClickListener
-            }
-
-            if (g.isRunning()) {
-                g.stopTelemetryTest()
-                binding.btnStartGeneralTest.text = "START TEST"
-            } else {
-                g.startTelemetryTest()
-                binding.btnStartGeneralTest.text = "STOP TEST"
-            }
-        }
-
-
-        // 有一些手机从系统桌面进入的时候可能会重启main类型的activity
-        // 需要校验这种情况，业界标准做法，基本所有app都需要这个
+        // Some mobile phones may restart the main type activity when entering from the system desktop
+        // Need to check this situation, basic app standard practice
         if (!isTaskRoot && intent.hasCategory(Intent.CATEGORY_LAUNCHER) && Intent.ACTION_MAIN == intent.action) {
-
-                finish()
-                return
-
+            finish()
+            return
         }
 
         window.decorView.apply {
@@ -135,32 +90,50 @@ abstract class DJIMainActivity : AppCompatActivity() {
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
         }
 
+        setupClickListeners()
         initMSDKInfoView()
         observeSDKManager()
         checkPermissionAndRequest()
-
-        /*telemetryLogger = TelemetryLogger(this)
-        telemetryLogger?.startLogging()
-    */
     }
 
+    @SuppressLint("SetTextI18n")
+    private fun setupClickListeners() {
+        // Handle General Test Button logic
+        binding.btnStartGeneralTest.setOnClickListener {
+            val g = general
+            if (g == null) {
+                binding.tvDebug.append("General test not initialized\n")
+                return@setOnClickListener
+            }
 
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (checkPermission()) {
-            handleAfterPermissionPermitted()
+            // Get the IP from the EditText
+            val brokerIp = binding.editBrokerIp.text.toString().trim()
+
+            if (g.isRunning()) {
+                // If already running, we just stop it
+                g.stopTelemetryTest()
+                binding.btnStartGeneralTest.text = "START TEST"
+                binding.tvDebug.append("Test stopped.\n")
+            } else {
+                // If starting, validate the IP first using MqttConfig
+                if (setHost(brokerIp)) {
+                    binding.tvDebug.append("IP Validated: $brokerIp.\n")
+                    g.startTelemetryTest()
+                    binding.btnStartGeneralTest.text = "STOP TEST"
+                } else {
+                    // Handle invalid IP format
+                    binding.tvDebug.append("ERROR: Invalid IP format ($brokerIp).\n")
+                    ToastUtils.showToast("Invalid Broker IP Address")
+                }
+            }
         }
-    }
 
-    override fun onResume() {
-        super.onResume()
-        if (checkPermission()) {
-            handleAfterPermissionPermitted()
+        // Handle pairing when clicking on base info panel
+        binding.viewBaseInfo.setOnClickListener {
+            baseMainActivityVm.doPairing {
+                showToast(it)
+            }
         }
-    }
-
-    private fun handleAfterPermissionPermitted() {
-        prepareTestingToolsActivity()
     }
 
     @SuppressLint("SetTextI18n")
@@ -173,21 +146,7 @@ abstract class DJIMainActivity : AppCompatActivity() {
             binding.textCoreInfo.text = it.coreInfo.toString()
         }
 
-        binding.iconSdkForum.setOnClickListener {
-            Helper.startBrowser(this, StringUtils.getResStr(R.string.sdk_forum_url))
-        }
-
-        binding.iconReleaseNode.setOnClickListener {
-            Helper.startBrowser(this, StringUtils.getResStr(R.string.release_node_url))
-        }
-        binding.iconTechSupport.setOnClickListener {
-            Helper.startBrowser(this, StringUtils.getResStr(R.string.tech_support_url))
-        }
-        binding.viewBaseInfo.setOnClickListener {
-            baseMainActivityVm.doPairing {
-                showToast(it)
-            }
-        }
+        // Removed old icon listeners as they are no longer in activity_main.xml
     }
 
     private fun observeSDKManager() {
@@ -197,6 +156,10 @@ abstract class DJIMainActivity : AppCompatActivity() {
                 ToastUtils.showToast("Register Success")
                 statusText = StringUtils.getResStr(this, R.string.registered)
                 msdkInfoVm.initListener()
+
+                // Initialize General Test module after successful registration
+                initGeneralTestModule()
+
                 handler.postDelayed({
                     prepareUxActivity()
                 }, 5000)
@@ -207,21 +170,10 @@ abstract class DJIMainActivity : AppCompatActivity() {
             binding.textViewRegistered.text = StringUtils.getResStr(R.string.registration_status, statusText)
         }
 
-        //start logging
         msdkManagerVM.lvProductConnectionState.observe(this) { resultPair ->
             val connected = resultPair.first
             val productName = resultPair.second
-
-            ToastUtils.showToast("Product: $productName ,ConnectionState: $connected")
-
-            if (!connected) {
-                LogUtils.w(tag, "Drone disconnected — stopping telemetry logging.")
-                //telemetryLogger?.stopLogging()
-            }
-        }
-
-        msdkManagerVM.lvProductConnectionState.observe(this) { resultPair ->
-            showToast("Product: ${resultPair.second} ,ConnectionState:  ${resultPair.first}")
+            ToastUtils.showToast("Product: $productName, ConnectionState: $connected")
         }
 
         msdkManagerVM.lvProductChanges.observe(this) { productId ->
@@ -235,51 +187,36 @@ abstract class DJIMainActivity : AppCompatActivity() {
         msdkManagerVM.lvDBDownloadProgress.observe(this) { resultPair ->
             showToast("Database Download Progress current: ${resultPair.first}, total: ${resultPair.second}")
         }
+    }
 
-        //test:
+    private fun initGeneralTestModule() {
+        val basicVM = ViewModelProvider(this).get(BasicAircraftControlVM::class.java)
+        val virtualStickVM = ViewModelProvider(this).get(VirtualStickVM::class.java)
+        val simulatorVM = ViewModelProvider(this).get(SimulatorVM::class.java)
 
-        msdkManagerVM.lvRegisterState.observe(this) { pair ->
-            val registered = pair.first
-
-            if (registered) {
-                val basicVM = ViewModelProvider(this)
-                    .get(BasicAircraftControlVM::class.java)
-
-                val virtualStickVM = ViewModelProvider(this)
-                    .get(VirtualStickVM::class.java)
-
-                val simulatorVM = ViewModelProvider(this)
-                    .get(SimulatorVM::class.java)
-
-                general = General(
-                    basicAircraftControlVM = basicVM,
-                    virtualStickVM = virtualStickVM,
-                    simulatorVM = simulatorVM,
-                    context= this,
-                ) { msg ->
-                    runOnUiThread {
-                        tvDebug.append(msg + " \n")
-                        debugScroll.post {
-                            debugScroll.fullScroll(View.FOCUS_DOWN)
-                        }
-                    }
+        general = General(
+            basicAircraftControlVM = basicVM,
+            virtualStickVM = virtualStickVM,
+            simulatorVM = simulatorVM,
+            context = this,
+        ) { msg ->
+            runOnUiThread {
+                binding.tvDebug.append("$msg\n")
+                binding.debugScroll.post {
+                    binding.debugScroll.fullScroll(View.FOCUS_DOWN)
                 }
-
-                binding.btnStartGeneralTest.isEnabled = true
-                binding.btnStartGeneralTest.text = "START TEST"
-            } else {
-                binding.btnStartGeneralTest.isEnabled = false
             }
         }
 
-
+        binding.btnStartGeneralTest.isEnabled = true
+        binding.btnStartGeneralTest.text = "START TEST"
     }
 
     private fun showToast(content: String) {
         ToastUtils.showToast(content)
-
     }
 
+    // --- Helper methods for enabling showcase buttons ---
 
     fun <T> enableDefaultLayout(cl: Class<T>) {
         enableShowCaseButton(binding.defaultLayoutButton, cl)
@@ -301,6 +238,8 @@ abstract class DJIMainActivity : AppCompatActivity() {
             }
         }
     }
+
+    // --- Permission Handling ---
 
     private fun checkPermissionAndRequest() {
         if (!checkPermission()) {
@@ -332,8 +271,25 @@ abstract class DJIMainActivity : AppCompatActivity() {
         requestPermissionLauncher.launch(permissionArray.toArray(arrayOf()))
     }
 
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (checkPermission()) {
+            handleAfterPermissionPermitted()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (checkPermission()) {
+            handleAfterPermissionPermitted()
+        }
+    }
+
+    private fun handleAfterPermissionPermitted() {
+        prepareTestingToolsActivity()
+    }
+
     override fun onDestroy() {
-        //telemetryLogger?.stopLogging()
         super.onDestroy()
         handler.removeCallbacksAndMessages(null)
         disposable.dispose()
