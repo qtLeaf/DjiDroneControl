@@ -224,7 +224,11 @@ class General(
         }
     }
 
-    // Initialize the virtual stick
+    /**
+     * Controller for virtual stick movements.
+     * * Handles the conversion of high-level commands (e.g., "forward") into
+     * precise roll, pitch, yaw, and vertical throttle values sent to the drone.
+     */
     private val vfc = VirtualFlightController(
         basicAircraftControlVM,
         virtualStickVM,
@@ -232,6 +236,14 @@ class General(
         deadZone = 0.0005f//mimum speed
     )
 
+    /**
+     * Managed sequence for automated takeoff using Virtual Sticks.
+     * * The process follows these steps:
+     * 1. Disable any existing VS sessions to reset the state.
+     * 2. Enable Virtual Stick mode.
+     * 3. Poll [checkStateAndStart] up to 10 times to verify GPS/Firmware readiness.
+     * 4. Trigger the physical takeoff command via [vfc.takeOff].
+     */
     private val virtualStickTakeOff = object : Runnable {
         override fun run() {
             if (!running) return
@@ -413,17 +425,12 @@ class General(
     private val gimbalController = CameraGimbalController { msg -> debug(msg) }
 
     /**
-     * Parses and executes remote commands received via MQTT.
-     *
-     * Commands are sent as JSON objects with the structure:
-     *
-     * {
-     *   "action": "forward",
-     *   "duration": 2000,
-     *   "speed": 0.5
-     * }
-     *
-     * Supported categories:
+     * Entry point for all incoming MQTT messages from the "drone/commands" topic.
+     * * @param payload A JSON string containing:
+     * - "action": (String) The command name (e.g., "forward", "gimbal", "photo").
+     * - "duration": (Double, optional) Time in milliseconds for movement.
+     * - "speed": (Double, optional) Normalized speed between 0.0 and 1.0.
+     * - "pitch"/"yaw": (Double, optional) Target angles for gimbal control.
      *
      * Flight control:
      * - takeoff
@@ -667,13 +674,30 @@ class General(
     }
 
 
-
+    /**
+     * Triggers a high-speed "Live Stream" photo capture.
+     *
+     * Instead of switching the camera to a dedicated photo mode (which is slow
+     * and interrupts the video feed), this method sets [captureNextFrame] to true.
+     *
+     * The [startCameraFrameListener] will then intercept the very next raw YUV
+     * frame from the live video stream, convert it to JPEG, and send it via MQTT.
+     */
     private fun executeTakePhoto() {
         debug("Remote Command: PHOTO")
         captureNextFrame.set(true)
     }
 
-    // Update the function to accept the PC's initial timestamp
+    // should be updated without the drone location but calculate the execute photo time (removing the gallery access)
+    /**
+    * Executes an end-to-end latency and data throughput test.
+    * * This test:
+    * 1. Retrieves the most recent high-resolution photo from the drone's local gallery.
+    * 2. Resizes the image to 720p to manage MQTT payload size.
+    * 3. Calculates processing time on the drone.
+    * 4. Bundles the image, GPS coordinates, and timing data into a JSON response
+    * sent to "drone/ping_test".
+    */
     private fun executeGalleryPingTest(pcTimestamp: Long, droneReceivedTime: Long) {
 
         val photoBytes = getLastPhotoFromGallery() ?: return
@@ -721,7 +745,6 @@ class General(
         }
         return null
     }
-
     private fun getLocation(): LocationCoordinate3D? {
         val locationKey = KeyTools.createKey(FlightControllerKey.KeyAircraftLocation3D)
 
