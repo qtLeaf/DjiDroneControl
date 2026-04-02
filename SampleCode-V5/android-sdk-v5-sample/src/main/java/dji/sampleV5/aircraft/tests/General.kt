@@ -73,15 +73,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * PC  <--MQTT-->  Drone
  *
  * Incoming commands are received through MQTT and handled in
- * [handleRemoteCommand]. Supported commands include:
- *
- * - takeoff
- * - land
- * - movement (forward, backward, left, right, rotate)
- * - gimbal control
- * - zoom
- * - photo capture
- * - ping tests
+ * [handleRemoteCommand].
  *
  * Telemetry is periodically published using [telemetryTask].
  *
@@ -215,7 +207,6 @@ class General(
                     debug("TX: $json")
                      */
                 }
-
             } catch (e: Exception) {
                 debug("Error telemetry: ${e.message}")
             }
@@ -226,7 +217,7 @@ class General(
 
     /**
      * Controller for virtual stick movements.
-     * * Handles the conversion of high-level commands (e.g., "forward") into
+     * Handles the conversion of high-level commands (e.g., "forward") into
      * precise roll, pitch, yaw, and vertical throttle values sent to the drone.
      */
     private val vfc = VirtualFlightController(
@@ -237,86 +228,6 @@ class General(
     )
 
     /**
-     * Managed sequence for automated takeoff using Virtual Sticks.
-     * * The process follows these steps:
-     * 1. Disable any existing VS sessions to reset the state.
-     * 2. Enable Virtual Stick mode.
-     * 3. Poll [checkStateAndStart] up to 10 times to verify GPS/Firmware readiness.
-     * 4. Trigger the physical takeoff command via [vfc.takeOff].
-     */
-    private val virtualStickTakeOff = object : Runnable {
-        override fun run() {
-            if (!running) return
-
-            debug("Requesting Virtual Stick")
-
-            // make sure there are no residues from previous sessions
-            virtualStickVM.disableVirtualStick(object : CommonCallbacks.CompletionCallback {
-                override fun onSuccess() {
-                    enableVSStep()
-                }
-                override fun onFailure(error: IDJIError) {
-                    enableVSStep() // proceeds anyway
-                }
-            })
-        }
-
-        private fun enableVSStep() {
-            virtualStickVM.enableVirtualStick(object : CommonCallbacks.CompletionCallback {
-                override fun onSuccess() {
-                    debug("Enable command sent. Verifying state...")
-                    // need 1-2 sec to update the state
-                    handler.postDelayed({ checkStateAndStart() }, 1500)
-                }
-
-                override fun onFailure(error: IDJIError) {
-                    debug("Failed to enable VS: ${error.description()}")
-                }
-            })
-        }
-
-        private var retryCount = 0
-        //retry multiple times in case of errors
-        private fun checkStateAndStart() {
-            val state = virtualStickVM.currentVirtualStickStateInfo.value?.state
-
-            if (state?.isVirtualStickEnable == true) {
-                debug("VS ENABLED Starting flight sequence.")
-                retryCount = 0
-                startFlightSequence()
-            } else {
-                if (retryCount < 10) { // synchronize the data
-                    retryCount++
-                    debug("Waiting for GPS/Firmware (Attempt $retryCount/10)")
-                    handler.postDelayed({ checkStateAndStart() }, 1000)
-                } else {
-                    debug("CRITICAL: Cannot enable VS. Check GPS signal -- other problem.")
-                    stopTelemetryTest()
-                }
-            }
-        }
-
-        private fun startFlightSequence() {
-            debug("Initiating Automatic Takeoff...")
-
-            // takeOff with safety check
-            vfc.takeOff(
-                onOk = {
-                    debug("Takeoff successful. Waiting to reach safe altitude...")
-                    // wait a 6-8 sec for hovering (1.2m)
-                    //handler.postDelayed({ moveForward() }, 8000)
-                    //handler.postDelayed({ land() }, 8000)
-                    //handler.postDelayed({ orbitStep() }, 8000)
-
-                },
-                onErr = {
-                    debug("takeoff FAILED: ${it.description()}")
-                }
-            )
-        }
-    }
-
-    /**
      * Starts a camera frame listener using DJI CameraStreamManager.
      *
      * Frames are monitored in YUV format. When [captureNextFrame] is toggled to true
@@ -324,12 +235,11 @@ class General(
      * color alignment (YUV Planar to NV21), compressed to JPEG, and published.
      */
     private fun startCameraFrameListener() {
-        debug("Camera Frame Listener initialized. Waiting for 'photo' command...")
-
+        //debug("Camera Frame Listener initialized")
         cameraStreamManager.addFrameListener(
             cameraIndex,
             ICameraStreamManager.FrameFormat.NV21
-        ) { data, width, height, _, _, _ ->
+        ) { data, width, height, _, _, _ -> //this is the frame who arrives
 
             // Only process if the "photo" command was recently received
             if (!captureNextFrame.get()) return@addFrameListener
@@ -419,9 +329,6 @@ class General(
         }
     }
 
-
-    //here is where the commands are received from the PC and sent to the drone
-
     private val gimbalController = CameraGimbalController { msg -> debug(msg) }
 
     /**
@@ -472,8 +379,8 @@ class General(
                 }
 
                 //---- DRONE MOVEMENT -----
-                "enablevs" -> executeVSenable()
-                "disablevs" -> executeVSdisable()
+                "enablevs" -> executeVSEnable()
+                "disablevs" -> executeVSDisable()
 
                 "takeoff" -> executeTakeoff()
                 "land" -> executeLanding()
@@ -622,12 +529,16 @@ class General(
     }
 
     /**
-     * Execute takeoff
+     * Execute takeoff + Enable Virtual Stick
      */
     private fun executeTakeoff() {
         debug("Remote Command: TAKEOFF")
-        //virtualStickTest.run()
-        virtualStickTakeOff.run()
+        //virtualStickTakeOff.run()
+        executeVSEnable()
+        vfc.takeOff(
+            onOk = { debug("Takeoff successful") },
+            onErr = { debug("takeoff Failed: ${it.description()}") }
+        )
 
     }
 
@@ -637,7 +548,7 @@ class General(
     private fun executeLanding() {
         debug("Remote Command: LAND")
         vfc.land(
-            onOk = { debug("Landing Successful") },
+            onOk = { debug("Landing successful") },
             onErr = { debug("Landing Failed: ${it.description()}") }
         )
     }
@@ -645,11 +556,11 @@ class General(
     /**
      * Enable Virtual Stick
      */
-    private fun executeVSenable(){
+    private fun executeVSEnable(){
         debug("Remote Command: ENABLE VS")
         virtualStickVM.enableVirtualStick(object : CommonCallbacks.CompletionCallback {
             override fun onSuccess() {
-                debug("VS Enabled successfully")
+                debug("VS enabled successfully")
             }
             override fun onFailure(error: IDJIError) {
                 debug("Failed to enable VS")
@@ -660,19 +571,17 @@ class General(
     /**
      * Disable Virtual Stick
      */
-    private fun executeVSdisable(){
+    private fun executeVSDisable(){
         debug("Remote Command: DISABLE VS")
         virtualStickVM.disableVirtualStick(object : CommonCallbacks.CompletionCallback {
             override fun onSuccess() {
-                debug("Disabled successfully")
+                debug("VS disabled successfully")
             }
             override fun onFailure(error: IDJIError) {
                 debug("Failed to disable")
             }
         })
-
     }
-
 
     /**
      * Triggers a high-speed "Live Stream" photo capture.
