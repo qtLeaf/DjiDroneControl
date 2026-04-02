@@ -9,11 +9,16 @@ The goal is to experiment with autonomous flight logic and real-time data record
 - Perform basic automated movements with virtual stick (in a raw state)
 
 - Able to send telemetry with mqtt to another machine (using pc_mqtt_pubsub.py)
+
+- Send photos taken from video stream (low resolution 720p)
      
  Planned improvements include: have a better movements options of drone and camera, 
- be able to take photos/videos and send them through mqtt
+ be able to take videos and send them through mqtt
 
-To set the application open the project in android of "SampleCode-V5/android-sdk-v5-as" - suggest to use Android Studio Meerkat | 2024.3.1 Patch 1 -
+ 
+How to set up the application:
+
+Open the project in android of "SampleCode-V5/android-sdk-v5-as" - suggest to use Android Studio Meerkat | 2024.3.1 Patch 1 -
 
 Make sure to have at least java 17 in Setting -> Build, Execution, Deployment -> Build Tools -> Gradle  in Gradle JDK section.
 
