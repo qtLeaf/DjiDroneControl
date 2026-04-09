@@ -8,6 +8,7 @@ import dji.sdk.keyvalue.value.common.EmptyMsg
 import dji.v5.common.callback.CommonCallbacks
 import dji.v5.common.error.IDJIError
 import dji.v5.manager.aircraft.virtualstick.Stick
+import org.jetbrains.annotations.Debug
 import kotlin.math.abs
 
 
@@ -22,7 +23,8 @@ class VirtualFlightController(
     private val basicAircraftControlVM: BasicAircraftControlVM,
     private val virtualStickVM: VirtualStickVM,
     private val simulatorVM: SimulatorVM,
-    private val deadZone: Float = 0.002f //minimum speed
+    private val deadZone: Float = 0.002f, //minimum speed
+    private val onDebug: (String) -> Unit
 ) {
 
     private val max = Stick.MAX_STICK_POSITION_ABS
@@ -82,10 +84,27 @@ class VirtualFlightController(
         val state = virtualStickVM.currentVirtualStickStateInfo.value?.state
 
         if (state?.isVirtualStickEnable != true) {
-            ToastUtils.showToast("Virtual Stick not enabled")
-            return
-        }
+            virtualStickVM.enableVirtualStick(object : CommonCallbacks.CompletionCallback {
+                override fun onSuccess() {
+                    onDebug("VS Enabled")
+                    basicAircraftControlVM.startTakeOff(object :
+                        CommonCallbacks.CompletionCallbackWithParam<EmptyMsg> {
 
+                        override fun onSuccess(t: EmptyMsg?) {
+                            onOk?.invoke()
+                        }
+
+                        override fun onFailure(error: IDJIError) {
+                            onErr?.invoke(error)
+                        }
+                    })
+                }
+
+                override fun onFailure(error: IDJIError) {
+                    onDebug("Failed to enable VS: ${error.description()}")
+                }
+            })
+        }
         basicAircraftControlVM.startTakeOff(object :
             CommonCallbacks.CompletionCallbackWithParam<EmptyMsg> {
 

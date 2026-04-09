@@ -190,9 +190,9 @@ abstract class DJIMainActivity : AppCompatActivity() {
     }
 
     private fun initGeneralTestModule() {
-        val basicVM = ViewModelProvider(this).get(BasicAircraftControlVM::class.java)
-        val virtualStickVM = ViewModelProvider(this).get(VirtualStickVM::class.java)
-        val simulatorVM = ViewModelProvider(this).get(SimulatorVM::class.java)
+        val basicVM = ViewModelProvider(this)[BasicAircraftControlVM::class.java]
+        val virtualStickVM = ViewModelProvider(this)[VirtualStickVM::class.java]
+        val simulatorVM = ViewModelProvider(this)[SimulatorVM::class.java]
 
         general = General(
             basicAircraftControlVM = basicVM,

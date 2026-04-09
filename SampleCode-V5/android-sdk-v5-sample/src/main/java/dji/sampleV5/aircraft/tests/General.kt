@@ -224,7 +224,8 @@ class General(
         basicAircraftControlVM,
         virtualStickVM,
         simulatorVM,
-        deadZone = 0.0005f//mimum speed
+        deadZone = 0.0005f,//mimum speed
+        onDebug = { msg -> debug(msg) }
     )
 
     /**
@@ -232,13 +233,14 @@ class General(
      *
      * Frames are monitored in YUV format. When [captureNextFrame] is toggled to true
      * by an MQTT command, the next available frame is intercepted, corrected for
-     * color alignment (YUV Planar to NV21), compressed to JPEG, and published.
+     * color alignment (YUV Planar to NV21 or YUV420_888), compressed to JPEG, and published.
      */
     private fun startCameraFrameListener() {
         //debug("Camera Frame Listener initialized")
         cameraStreamManager.addFrameListener(
             cameraIndex,
-            ICameraStreamManager.FrameFormat.NV21
+            ICameraStreamManager.FrameFormat.YUV420_888
+            //ICameraStreamManager.FrameFormat.NV21
         ) { data, width, height, _, _, _ -> //this is the frame who arrives
 
             // Only process if the "photo" command was recently received
@@ -533,11 +535,9 @@ class General(
      */
     private fun executeTakeoff() {
         debug("Remote Command: TAKEOFF")
-        //virtualStickTakeOff.run()
-        executeVSEnable()
         vfc.takeOff(
             onOk = { debug("Takeoff successful") },
-            onErr = { debug("takeoff Failed: ${it.description()}") }
+            onErr = { debug("Takeoff Failed: ${it.description()}") }
         )
 
     }

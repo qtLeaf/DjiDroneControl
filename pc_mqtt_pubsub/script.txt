@@ -23,12 +23,10 @@
 pot + plant height= 11 + 9.5 = 20.5
 sqaure on table are large 5,6 cm
 
-better fi get closer more drone goes up
+better if get closer more drone goes up
 
 
 forward 1000 0.1 // i know the time, so i can set the next move after the copletition
 backward 2000 0.1 // just after take off i should wait a few
-
-
 
 stop
