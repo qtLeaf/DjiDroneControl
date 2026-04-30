@@ -44,10 +44,14 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import android.util.Base64
 import dji.sampleV5.aircraft.tests.camera.CameraGimbalController
+import dji.sampleV5.aircraft.tests.navigation.WayPointNavigation
 import dji.sdk.keyvalue.key.GimbalKey
 import dji.sdk.keyvalue.value.common.LocationCoordinate3D
 import dji.sdk.keyvalue.value.gimbal.GimbalAngleRotation
+import dji.v5.et.get
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.math.pow
+import kotlin.time.times
 
 //mosquitto -c ~/mosquitto.conf
 //nano ~/mosquitto.conf
@@ -88,7 +92,7 @@ class General(
     private val virtualStickVM: VirtualStickVM,
     private val simulatorVM: SimulatorVM,
     private val context: Context,
-    private val onDebug: (String) -> Unit
+    private val onDebug: (String) -> Unit,
 ) {
 
     private var mqttPublisher : MqttPublisher? = null
@@ -142,6 +146,7 @@ class General(
 
             mqttSubscriber?.connect()
             running = true
+            setFlightLimit()
 
             telemetryTask.run()
             startCameraFrameListener()
@@ -226,6 +231,16 @@ class General(
         simulatorVM,
         deadZone = 0.0005f,//mimum speed
         onDebug = { msg -> debug(msg) }
+    )
+
+    /**
+     * waypoint navigation.
+     * handles the insertion of latitude, longitude and altitude and it translate this data into
+     * command (e.g., "forward") to move the drone to the waypoint addressed
+     */
+    private val wpn= WayPointNavigation(
+        vfc=vfc,
+        onDebug={msg: String -> debug(msg)}
     )
 
     /**
@@ -488,8 +503,16 @@ class General(
                         }, duration.toLong())
                     }
                 }
-                //---- CAMERA GIMBAL -----
+                // WAYPOINT NAVIGATION
+                "goto" -> {
+                    val lat = json.optDouble("lat")
+                    val lon = json.optDouble("lon")
+                    val alt = json.optDouble("alt")
+                    debug("Remote Command: GOTO $lat $lon $alt")
+                    wpn.gotogps(lat, lon, alt)
 
+                }
+                //---- CAMERA GIMBAL -----
                 "gimbal" -> {
                     val pitch = json.optDouble("pitch", 0.0)
                     val yaw = json.optDouble("yaw", 0.0)
@@ -599,14 +622,14 @@ class General(
 
     // should be updated without the drone location but calculate the execute photo time (removing the gallery access)
     /**
-    * Executes an end-to-end latency and data throughput test.
-    * * This test:
-    * 1. Retrieves the most recent high-resolution photo from the drone's local gallery.
-    * 2. Resizes the image to 720p to manage MQTT payload size.
-    * 3. Calculates processing time on the drone.
-    * 4. Bundles the image, GPS coordinates, and timing data into a JSON response
-    * sent to "drone/ping_test".
-    */
+     * Executes an end-to-end latency and data throughput test.
+     * * This test:
+     * 1. Retrieves the most recent high-resolution photo from the drone's local gallery.
+     * 2. Resizes the image to 720p to manage MQTT payload size.
+     * 3. Calculates processing time on the drone.
+     * 4. Bundles the image, GPS coordinates, and timing data into a JSON response
+     * sent to "drone/ping_test".
+     */
     private fun executeGalleryPingTest(pcTimestamp: Long, droneReceivedTime: Long) {
 
         val photoBytes = getLastPhotoFromGallery() ?: return
@@ -660,6 +683,11 @@ class General(
         val location = KeyManager.getInstance().getValue(locationKey)
 
         return location
+    }
+
+    private fun setFlightLimit(){
+        KeyManager.getInstance().setValue(KeyTools.createKey(FlightControllerKey.KeyMaxRadiusCanFlyAndGoHome),10.0, null)
+        KeyManager.getInstance().setValue(KeyTools.createKey(FlightControllerKey.KeyLimitMaxFlightHeightInMeter), 2, null)
     }
 
     /**

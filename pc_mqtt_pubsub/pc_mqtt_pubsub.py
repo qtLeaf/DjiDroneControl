@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 class DroneController:
-    def __init__(self, broker_ip="172.20.10.2", broker_port=1883):
+    def __init__(self, broker_ip="10.192.235.154", broker_port=1883):
         self.broker_ip = broker_ip
         self.broker_port = broker_port
         
@@ -163,11 +163,12 @@ class DroneController:
                 cmd = line[0]
                 args = line[1:]
 
-                # todo: videos - pipe of cmds/script interpreter
+                # todo: up/down, move four direction, rotate, orbit (and more "complex" movement), viedo - pipe of cmds
+                #       attitude settings
                 if cmd == 'h':
                     print("takeoff | Land | stop | forward <time> <power> | backward <time> <power> | right <time> <power> | left<time> <power> ")
                     print(" rotateright <time> <power> | rotateleft <time> <power> | up <time> <power> | down <time> <power> | orbit <time>")
-                    print("enablevs | disablevs | gimbal <pitch> <yaw> | zoom <value>") # to enable or disable the virtual stick (rn takeoff deos it automatically
+                    print("enablevs | disablevs | gimbal <pitch> <yaw> | zoom <value> | goto <lat> <long> <alt>") # to enable or disable the virtual stick (rn takeoff deos it automatically
                     print(" p: photo | pg: photo (Gallery Ping) | i: Ping | q: Quit")
                 elif cmd == 'takeoff':
                     self.send_action("takeoff")
@@ -204,6 +205,7 @@ class DroneController:
                         )
                     except (IndexError, ValueError):
                         print("Use: forward 1000 0.1")
+                
                 elif cmd == 'backward':
                     try:
                         duration = float(args[0])
@@ -243,6 +245,7 @@ class DroneController:
                         )
                     except (IndexError, ValueError):
                         print("Use: right 1000 0.1")
+                
                 elif cmd == 'left':
                     try:
                         duration = float(args[0])
@@ -282,6 +285,7 @@ class DroneController:
                         )
                     except (IndexError, ValueError):
                         print("Use: rotateright 1000 0.1")
+                
                 elif cmd == 'rotateleft':
                     try:
                         duration = float(args[0])
@@ -377,6 +381,7 @@ class DroneController:
                                 "yaw": yaw
                             }
                         )
+                        
                     except (IndexError, ValueError):
                         print("Use: gimbal -45 0")
                 elif cmd == 'zoom':
@@ -384,7 +389,7 @@ class DroneController:
                         val = float(args[0])
                         
                         if val < 1:
-                            print("Zoom must be >= 1") #2.0 max for 4k, 4.0 max for 1080p (rn photo are staked at 720p)
+                            print("Zoom must be >= 1") #2.0 max for 4k, 4.0 max for 1080p
                             continue
                             
                         self.send_action(
@@ -401,12 +406,12 @@ class DroneController:
                     self.send_action("ping-photo") # This triggers executeGalleryPingTest()
                 elif cmd == 'i':
                     self.send_action("ping")
+                elif cmd == 'q':
+                    self.running = False
                 elif cmd == 'enablevs':
                     self.send_action("enablevs")
                 elif cmd == 'disablevs':
                     self.send_action("disablevs")
-                elif cmd == 'q': #quit
-                    self.running = False
                 elif cmd == '':
                     continue
                 else:
