@@ -5,15 +5,15 @@ import dji.sdk.keyvalue.key.FlightControllerKey
 import dji.sdk.keyvalue.key.KeyTools
 import dji.sdk.keyvalue.value.common.LocationCoordinate3D
 import dji.v5.manager.KeyManager
+import kotlin.math.abs
 import kotlin.math.pow
 
 class WayPointNavigation (
     private val vfc: VirtualFlightController,
     private val onDebug: (String)->Unit
 ){
-    private val ARRIVED_THRESH= 2.0
-    private val LOOP_DUR=200L
-    // private val SLOW_DOWN=6.0
+    private val ARRIVED_THRESH= 1.0
+    private val SLOW_DOWN=4.5
 
     fun gotogps(endLat: Double, endLong: Double, endAlt: Double){
         Thread{
@@ -30,7 +30,7 @@ class WayPointNavigation (
                     vfc.down(0.1f)
                 }
 
-                /**with rotation mode*/
+                /**with rotation mode
                 val aligned = bearingtocommandrot(bearing(curLat, endLat, curLong, endLong))
                 val dist = haversinedist(curLat, endLat, curLong, endLong)
                 if(dist<ARRIVED_THRESH){
@@ -38,12 +38,14 @@ class WayPointNavigation (
                     onDebug("Arrived")
                     break
                 }
-                if(aligned) {
+                if(aligned && dist>SLOW_DOWN) {
                     vfc.forward(0.1f)
+                }else{
+                    vfc.forward(0.05f)
                 }
                 Thread.sleep(LOOP_DUR)
-//*/
-                /** without the rotation mode //
+*/
+                /** without the rotation mode */
                 val dist= haversinedist(curLat,endLat,curLong,endLong)
                 if(dist<ARRIVED_THRESH){
                     vfc.stop()
@@ -51,12 +53,8 @@ class WayPointNavigation (
                     break
                 }
 
-                val aligned =bearingtocommand(bearing(curLat,endLat,curLong,endLong))
-                if(aligned){
-                    vfc.forward(0.1f)
-                }
-                Thread.sleep(LOOP_DUR)
-*/
+                val aligned =bearingtocommand(curLat,endLat,curLong,endLong)
+
             }
         }.start()
     }
@@ -87,7 +85,7 @@ class WayPointNavigation (
         return (Math.toDegrees(Math.atan2(x,y)) + 360 ) % 360
     }
 
-    /** function for goto with rotation of the drone*/
+    /** function for goto with rotation of the drone
     private fun bearingtocommandrot(bear: Double): Boolean{
         val attitude = KeyTools.createKey(FlightControllerKey.KeyAircraftAttitude)
         val curYaw = KeyManager.getInstance().getValue(attitude)?.yaw ?: return false
@@ -116,15 +114,49 @@ class WayPointNavigation (
             return false
         }
     }
+     */
 
     /** function for goto without the rotation of the drone*/
-    private fun bearingtocommand(bear: Double): Boolean{
-        when{
-            bear>=315 || bear<=45 -> vfc.forward(0.1f)
-            bear <= 135 -> vfc.right(0.1f)
-            bear <= 225 -> vfc.backward(0.1f)
-            bear < 315 -> vfc.left(0.1f)
-            else -> vfc.stop()
+    private fun bearingtocommand(lat1: Double, lat2: Double, longi1: Double, longi2: Double): Boolean{
+        var err_lat=lat1-lat2
+        var err_longi= longi1-longi2
+
+        if (abs(err_lat)>=abs(err_longi)){
+            if(err_lat>0){
+                while(abs(err_lat)>0.5) {
+                    if (err_lat > SLOW_DOWN) {
+                        vfc.backward(0.1f)
+                    } else {
+                        vfc.backward(0.05f)
+                    }
+                }
+            }else {
+                while (abs(err_lat) > 0.5) {
+                    if (abs(err_lat) > SLOW_DOWN) {
+                        vfc.forward(0.1f)
+                    } else {
+                        vfc.forward(0.05f)
+                    }
+                }
+            }
+        }else{
+            if(err_longi>0){
+                while(abs(err_longi)>0.5) {
+                    if (err_longi > SLOW_DOWN) {
+                        vfc.left(0.1f)
+                    } else {
+                        vfc.left(0.05f)
+                    }
+                }
+            }else{
+                while(abs(err_longi)>0.5) {
+                    if (abs(err_longi) > SLOW_DOWN) {
+                        vfc.right(0.1f)
+                    } else {
+                        vfc.right(0.05f)
+                    }
+                }
+            }
         }
 
         return true
