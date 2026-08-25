@@ -14,47 +14,73 @@ class WayPointNavigation (
 ){
     private val ARRIVED_THRESH= 1.0
     private val SLOW_DOWN=4.5
+    @Volatile
+    private var running=false
 
     fun gotogps(endLat: Double, endLong: Double, endAlt: Double){
+        if(running){
+            return
+        }
+        running=true
         Thread{
-            while(true){
-                val location = getLocation() ?: return@Thread
-                val curLat =location.latitude
-                val curLong = location.longitude
-                val curAlt = location.altitude
-                val errAlt = endAlt - curAlt
+            try{
+                while(running){
+                    val location = getLocation()
+                    if(location == null){
+                        vfc.stop()
+                        return@Thread
+                    }
+                    val curLat =location.latitude
+                    val curLong = location.longitude
+                    val curAlt = location.altitude
+                    val errAlt = endAlt - curAlt
 
-                if(errAlt > 0.5){
-                    vfc.up(0.1f)
-                }else if (errAlt < -0.5){
-                    vfc.down(0.1f)
-                }
+                    if(abs(errAlt)>0.5){
+                        if(errAlt > 0.5){
+                            vfc.up(0.1f)
+                            Thread.sleep(50L)
+                            continue
+                        }else if (errAlt < -0.5){
+                            vfc.down(0.1f)
+                            Thread.sleep(50L)
+                            continue
+                        }
+                    }
 
-                /**with rotation mode
-                val aligned = bearingtocommandrot(bearing(curLat, endLat, curLong, endLong))
-                val dist = haversinedist(curLat, endLat, curLong, endLong)
-                if(dist<ARRIVED_THRESH){
+                    /**with rotation mode*/
+                    val aligned = bearingtocommandrot(bearing(curLat, endLat, curLong, endLong))
+                    val dist = haversinedist(curLat, endLat, curLong, endLong)
+                    if(dist<ARRIVED_THRESH){
+                        vfc.stop()
+                        onDebug("Arrived")
+                        break
+                    }
+                    if(aligned){
+                        if(dist>SLOW_DOWN) {
+                            vfc.forward(0.05f)
+                        }else{
+                            vfc.forward(0.01f)
+                        }
+                    }else{
+                        Thread.sleep(50L)
+                        continue
+                    }
+
+                    /** without the rotation mode
+                    val dist= haversinedist(curLat,endLat,curLong,endLong)
+                    if(dist<ARRIVED_THRESH){
                     vfc.stop()
                     onDebug("Arrived")
                     break
-                }
-                if(aligned && dist>SLOW_DOWN) {
-                    vfc.forward(0.1f)
-                }else{
-                    vfc.forward(0.05f)
-                }
-                Thread.sleep(LOOP_DUR)
-*/
-                /** without the rotation mode */
-                val dist= haversinedist(curLat,endLat,curLong,endLong)
-                if(dist<ARRIVED_THRESH){
-                    vfc.stop()
-                    onDebug("Arrived")
-                    break
-                }
+                    }
 
-                val aligned =bearingtocommand(curLat,endLat,curLong,endLong)
-
+                    val aligned =bearingtocommand(curLat,endLat,curLong,endLong)
+                     */
+                    Thread.sleep(200L)
+                }
+            } finally {
+                vfc.stop()
+                running=false
             }
         }.start()
     }
@@ -85,7 +111,7 @@ class WayPointNavigation (
         return (Math.toDegrees(Math.atan2(x,y)) + 360 ) % 360
     }
 
-    /** function for goto with rotation of the drone
+    /** function for goto with rotation of the drone*/
     private fun bearingtocommandrot(bear: Double): Boolean{
         val attitude = KeyTools.createKey(FlightControllerKey.KeyAircraftAttitude)
         val curYaw = KeyManager.getInstance().getValue(attitude)?.yaw ?: return false
@@ -97,26 +123,19 @@ class WayPointNavigation (
             errang +=360
         }
 
-        if(errang >0){
-            vfc.rotateRight(0.1f)
-        }else if(errang < 0){
-            vfc.rotateLeft(0.1f)
-        }
-
-        if (Math.abs(errang)<= 5.0){
+        if (Math.abs(errang)<= 10.0){
             return true
         }else{
             if(errang >0){
-                vfc.rotateRight(0.1f)
+                vfc.rotateRight(0.05f)
             }else if(errang < 0){
-                vfc.rotateLeft(0.1f)
+                vfc.rotateLeft(0.05f)
             }
             return false
         }
     }
-     */
 
-    /** function for goto without the rotation of the drone*/
+    /** function for goto without the rotation of the drone
     private fun bearingtocommand(lat1: Double, lat2: Double, longi1: Double, longi2: Double): Boolean{
         var err_lat=lat1-lat2
         var err_longi= longi1-longi2
@@ -162,7 +181,7 @@ class WayPointNavigation (
         return true
 
     }
-
+    */
     private fun getLocation(): LocationCoordinate3D? {
         val locationKey = KeyTools.createKey(FlightControllerKey.KeyAircraftLocation3D)
 
