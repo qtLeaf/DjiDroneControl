@@ -44,6 +44,10 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import android.util.Base64
 import dji.sampleV5.aircraft.tests.camera.CameraGimbalController
+import dji.sampleV5.aircraft.tests.factorCorrection.DroneCorrector
+import dji.sampleV5.aircraft.tests.factorCorrection.ModelLoader
+import dji.sampleV5.aircraft.tests.factorCorrection.moveCor
+import dji.sampleV5.aircraft.tests.factorCorrection.rotationCor
 import dji.sampleV5.aircraft.tests.navigation.WayPointNavigation
 import dji.sdk.keyvalue.key.GimbalKey
 import dji.sdk.keyvalue.value.common.LocationCoordinate3D
@@ -52,6 +56,10 @@ import dji.v5.et.get
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.pow
 import kotlin.time.times
+
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 //mosquitto -c ~/mosquitto.conf
 //nano ~/mosquitto.conf
@@ -405,6 +413,40 @@ class General(
                     debug("Remote Command: STOP")
                     vfc.stop()
                 }
+
+                "forward", "backwards", "right", "left" ->{
+                    if (duration > 0 && speed > 0 && speed <= 1.0){
+                        debug("Remote Command: $action (with ML)")
+                        CoroutineScope(Dispatchers.Main).launch{
+                            vfc.moveCor(
+                                action=action,
+                                targetTime = duration.toLong(),
+                                power = speed.toFloat(),
+                                predictor = movePredictor,
+                                onDebug={msg ->debug(msg)}
+                            )
+                        }
+                    }else{
+                        debug("invalid movement parameters")
+                    }
+                }
+                "rotateright","rotateleft" ->{
+                    if (duration > 0 && speed > 0 && speed <= 1.0){
+                        debug("Remote Command: $action (with ML)")
+                        CoroutineScope(Dispatchers.Main).launch{
+                            vfc.rotationCor(
+                                action=action,
+                                targetTime = duration.toLong(),
+                                power = speed.toFloat(),
+                                predictor = rotatePredictor,
+                                onDebug={msg ->debug(msg)}
+                            )
+                        }
+                    }else{
+                        debug("invalid movement parameters")
+                    }
+                }
+                /** Normal movement without the correction
                 "forward" -> {
                     if (duration > 0 && speed > 0 && speed <= 1.0) {
                         debug("Remote Command: FORWARD")
@@ -471,6 +513,9 @@ class General(
                     } else {
                         debug("Invalid forward parameters")
                     }}
+                */
+
+
                 "up" -> {
                     if (duration > 0 && speed > 0 && speed <= 1.0) {
                         debug("Remote Command: UP")
@@ -698,6 +743,21 @@ class General(
 
     private fun debug(msg: String) {
         onDebug(msg)
+    }
+
+    /**
+     * ML predictors
+     * Upload JSON file from 'assets' directory
+     */
+
+    private val movePredictor by lazy{
+        val params = ModelLoader.LoadFromAssets(context, "move_model.json")
+        DroneCorrector(params)
+    }
+
+    private val rotatePredictor by lazy{
+        val params = ModelLoader.LoadFromAssets(context, "rotate_model.json")
+        DroneCorrector(params)
     }
 
 }
