@@ -43,6 +43,7 @@ import java.io.ByteArrayOutputStream
 
 import java.io.File
 import android.util.Base64
+import android.widget.Toast
 import dji.sampleV5.aircraft.tests.camera.CameraGimbalController
 import dji.sampleV5.aircraft.tests.factorCorrection.DroneCorrector
 import dji.sampleV5.aircraft.tests.factorCorrection.ModelLoader
@@ -423,7 +424,9 @@ class General(
                                 targetTime = duration.toLong(),
                                 power = speed.toFloat(),
                                 predictor = movePredictor,
-                                onDebug={msg ->debug(msg)}
+                                onDebug={msg ->debug(msg)
+                                    Toast.makeText(context, "ML: $msg",Toast.LENGTH_SHORT).show()
+                                }
                             )
                         }
                     }else{
@@ -439,7 +442,9 @@ class General(
                                 targetTime = duration.toLong(),
                                 power = speed.toFloat(),
                                 predictor = rotatePredictor,
-                                onDebug={msg ->debug(msg)}
+                                onDebug={msg ->debug(msg)
+                                    Toast.makeText(context, "ML: $msg",Toast.LENGTH_SHORT).show()
+                                }
                             )
                         }
                     }else{

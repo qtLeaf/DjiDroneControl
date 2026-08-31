@@ -59,6 +59,8 @@ suspend fun VirtualFlightController.moveCor(action: String, targetTime: Long, po
     val timeErrMs =(errorMeter/speedMeterMs).toLong()
     val timeCor=(targetTime-timeErrMs).coerceAtLeast(0L)
 
+    onDebug("$action $timeCor $power")
+
     if(timeCor >0){
         when(action){
             "forward" -> this.forward(power)
@@ -85,6 +87,8 @@ suspend fun VirtualFlightController.rotationCor(action: String,targetTime: Long,
     val speedDegreesMs= power * kDegMs
     val timeErrMs =(errorDegrees/speedDegreesMs).toLong()
     val timeCor=(targetTime-timeErrMs).coerceAtLeast(0L)
+
+    onDebug("$action $timeCor $power")
 
     if(timeCor >0){
         when(action){
