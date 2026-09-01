@@ -54,12 +54,16 @@ suspend fun VirtualFlightController.moveCor(action: String, targetTime: Long, po
         return
     }
 
-    val errorMeter= predictor.predictErr(targetTime.toDouble(), power.toDouble())
-    val speedMeterMs=(power*10)/1000
-    val timeErrMs =(errorMeter/speedMeterMs).toLong()
-    val timeCor=(targetTime-timeErrMs).coerceAtLeast(0L)
+    val targetDistMeter=(targetTime/1000.0)*(power*10.0)
+    val errorMeter= predictor.predictErr(targetTime.toDouble()/1000, power.toDouble())
+    val excpectedActualDist=targetDistMeter + errorMeter
+    val timeCor=if(excpectedActualDist >0 && targetDistMeter >0){
+        (targetTime*(targetDistMeter/excpectedActualDist)).toLong().coerceAtLeast(0L)
+    }else{
+        0L
+    }
 
-    onDebug("$action $timeCor $power")
+    onDebug("$action | Err: ${String.format("%.2f", errorMeter)}m |MS: $timeCor $power")
 
     if(timeCor >0){
         when(action){
@@ -82,11 +86,15 @@ suspend fun VirtualFlightController.rotationCor(action: String,targetTime: Long,
         return
     }
 
-    val errorDegrees= predictor.predictErr(targetTime.toDouble(), power.toDouble())
     val kDegMs=0.288
-    val speedDegreesMs= power * kDegMs
-    val timeErrMs =(errorDegrees/speedDegreesMs).toLong()
-    val timeCor=(targetTime-timeErrMs).coerceAtLeast(0L)
+    val targetDistDegrees= targetTime*power*kDegMs
+    val errorDegrees= predictor.predictErr(targetTime.toDouble()/1000.0, power.toDouble())
+    val expectedActualDegrees=targetDistDegrees+errorDegrees
+    val timeCor=if(expectedActualDegrees>0){
+        (targetTime*(targetDistDegrees/expectedActualDegrees)).toLong()
+    }else{
+        0L
+    }
 
     onDebug("$action $timeCor $power")
 
