@@ -6,7 +6,7 @@ import threading
 from pathlib import Path
 
 class DroneController:
-    def __init__(self, broker_ip="10.192.235.154", broker_port=1883):
+    def __init__(self, broker_ip="10.92.213.154", broker_port=1883):
         self.broker_ip = broker_ip
         self.broker_port = broker_port
         
@@ -345,6 +345,22 @@ class DroneController:
                         )
                     except (IndexError, ValueError):
                         print("Use: down 1000 0.1")
+                        
+                elif cmd == 'goto':
+                    try:
+                        lat=float(args[0])
+                        lon=float(args[1])
+                        alt=float(args[2])
+                        self.send_action(
+                            "goto",
+                            {
+                            "lat": lat,
+                            "lon": lon,
+                            "alt":alt
+                            }
+                        )
+                    except (IndexError, ValueError):
+                        print("Use: goto <lat> <lon> <alt>")    
 
                 elif cmd == 'orbit':
                     try:
